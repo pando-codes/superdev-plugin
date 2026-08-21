@@ -1,0 +1,7 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Bug in the plugin itself
+    url: https://github.com/pando-codes/superdev-plugin/issues/new
+    about: >
+      Open a blank issue. This repository is a mirror, so the fix lands upstream
+      and arrives here on the next release.
