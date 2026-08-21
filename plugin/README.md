@@ -164,14 +164,18 @@ the role belongs to the repository.
 
 ### Getting a key
 
-**The hosted catalogue is invite-only while it is in beta.** Onboarding is done by hand, one
-account at a time, because the isolation a public signup would have to promise is not finished —
-see [what is not true yet](#what-is-not-true-yet). If you want in:
+**If you have an account, issue your own key at
+[superdev-portal.vercel.app](https://superdev-portal.vercel.app).** Sign in by emailed link, pick
+the product and the role, and the key is shown once — only its hash is stored, so it cannot be
+read back. You can revoke any key from the same page.
+
+**Accounts themselves are still created by hand**, because the isolation a public signup would
+have to promise is not finished — see [what is not true yet](#what-is-not-true-yet). The portal
+issues keys; it does not create accounts. If you want one:
 
 **[Request access →](https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml)**
 
-You get back a product, a `product-manager` key, and an `engineer` key, and a walk through
-`init` if you want one.
+You get back an account with a product in it, and a walk through `init` if you want one.
 
 If you operate your own catalogue, a key is minted per holder with the owner database credential
 this plugin deliberately does not hold:

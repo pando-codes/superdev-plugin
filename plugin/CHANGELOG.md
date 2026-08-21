@@ -11,6 +11,28 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.5.2 — 2026-08-21
+
+### Changed
+
+- **If you have an account, you no longer have to ask anyone for a key.** There is a portal now —
+  [superdev-portal.vercel.app](https://superdev-portal.vercel.app) — and an unconfigured server
+  points at it *first*, before the access request.
+
+  The order is the change. The common case is not a new user: it is someone whose key has lapsed,
+  or who is setting up a second machine, and who has an account already. Sending them to request
+  access was sending them to queue behind a human for something they can do in a browser in thirty
+  seconds.
+
+  `superdev:connect` now distinguishes three cases rather than two — you have an account, you do
+  not, or the catalogue is your own — and tells anyone going to the portal the two things that are
+  otherwise learned the hard way: the key is shown exactly once and cannot be read back, and the
+  plugin reads its configuration once at startup, so the session has to be restarted afterwards.
+
+  **Accounts are still created by hand.** The portal issues keys; it does not create accounts, and
+  the catalogue stays invite-only while the isolation a public signup would have to promise is
+  unfinished.
+
 ## 0.5.1 — 2026-08-21
 
 ### Fixed

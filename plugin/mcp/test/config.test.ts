@@ -20,7 +20,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ACCESS_REQUEST_URL, ConfigError, loadConfig, sanitizeAgentId } from "../src/config.ts";
+import { ACCESS_REQUEST_URL, ConfigError, loadConfig, PORTAL_URL, sanitizeAgentId } from "../src/config.ts";
 
 const temps: string[] = [];
 
@@ -173,6 +173,7 @@ describe("when it cannot be resolved", () => {
     expect(message).toContain("mint-key");
     // And somewhere a reader who holds no database credential can actually go.
     expect(message).toContain(ACCESS_REQUEST_URL);
+    expect(message).toContain(PORTAL_URL);
   });
 
   test("malformed JSON is named, not silently treated as absent", () => {

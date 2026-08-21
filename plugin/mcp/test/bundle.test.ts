@@ -43,7 +43,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ACCESS_REQUEST_URL } from "../src/config.ts";
+import { ACCESS_REQUEST_URL, PORTAL_URL } from "../src/config.ts";
 import { allTools } from "../src/tools/index.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -230,6 +230,7 @@ describe("the committed bundle", () => {
       // repository the user is standing in.
       expect(text).toContain("mint-key");
       expect(text).toContain(ACCESS_REQUEST_URL);
+      expect(text).toContain(PORTAL_URL);
     } finally {
       await client.close();
     }

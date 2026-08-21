@@ -21909,6 +21909,7 @@ var seg = (value) => encodeURIComponent(value);
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir, hostname as hostname3 } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+var PORTAL_URL = "https://superdev-portal.vercel.app";
 var ACCESS_REQUEST_URL = "https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml";
 var ROLES = [
   "product-manager",
@@ -22008,8 +22009,11 @@ function loadConfig(env = process.env, cwd = process.cwd()) {
 ` + `    "keys": { "engineer": "pcat_live_...", "product-manager": "pcat_live_..." }
 ` + `  }
 
-` + `The hosted catalogue is invite-only while it is in beta. If you do
-` + `not have a key yet, ask for one:
+` + `If you have an account on the hosted catalogue, issue yourself a key:
+` + `  ${PORTAL_URL}
+
+` + `The catalogue is invite-only while it is in beta. If you do not have an
+` + `account yet, ask for one:
 ` + `  ${ACCESS_REQUEST_URL}
 
 ` + `If you run your own catalogue, a key is minted with the owner database

@@ -25,7 +25,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ACCESS_REQUEST_URL, ConfigError, loadConfig } from "../src/config.ts";
+import { ACCESS_REQUEST_URL, ConfigError, loadConfig, PORTAL_URL } from "../src/config.ts";
 import { allTools } from "../src/tools/index.ts";
 import { toolsForRole } from "../src/roles.ts";
 import { call, startStub, type StubHarness } from "./harness.ts";
@@ -87,7 +87,12 @@ describe("an install with no key", () => {
     expect(result.text).toContain("mint-key");
     // And, for the reader who holds no owner credential and never will, the one
     // instruction in the message they can actually act on.
+    // The portal first: the common case is a person whose account exists and
+    // whose key has lapsed, and sending them to ask for access is sending them
+    // to queue for something they can do themselves.
+    expect(result.text).toContain(PORTAL_URL);
     expect(result.text).toContain(ACCESS_REQUEST_URL);
+    expect(result.text.indexOf(PORTAL_URL)).toBeLessThan(result.text.indexOf(ACCESS_REQUEST_URL));
     expect(result.text).toContain(guidance);
   });
 

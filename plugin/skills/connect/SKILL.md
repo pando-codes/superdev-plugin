@@ -79,15 +79,27 @@ Instead, tell them where the key comes from and let them put it in place themsel
 Where a key comes from depends on whose catalog it is, and the two cases have different answers.
 Ask which one applies before giving either.
 
-**The hosted catalog.** It is invite-only while it is in beta, and there is nothing to run —
-onboarding is by hand. Give the user the link and stop:
+**The hosted catalog, and the user has an account.** Send them to the portal, where they issue
+the key themselves:
+
+```
+https://superdev-portal.vercel.app
+```
+
+Sign in by emailed link, pick the product, pick the role, and the key is shown **once**. This is
+the common case and it should be offered first — a person whose key has lapsed, or who is setting
+up a second machine, does not need to ask anyone.
+
+Tell them two things while they are there, because both are easy to discover the hard way: the key
+is shown exactly once and only its hash is stored, so it cannot be read back; and the plugin reads
+its configuration once at startup, so the session has to be restarted afterwards.
+
+**The hosted catalog, and the user has no account.** Accounts are created by hand while the beta
+is invite-only — the portal issues keys, it does not create accounts. Give them the link and stop:
 
 ```
 https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml
 ```
-
-They get back a product and two keys. This is the answer for anyone who installed the plugin
-from the marketplace.
 
 **Their own catalog.** Minting is an operator action, run by whoever holds the owner database
 credential:

@@ -66,6 +66,17 @@ import { isAbsolute, join, resolve } from "node:path";
  * link and nothing else — this process holds no key and sends nothing anywhere,
  * which is the property the whole unconfigured path exists to preserve.
  */
+/**
+ * Where someone who already has an account issues themselves a key.
+ *
+ * Listed BEFORE the access request, because the two audiences arrive here in
+ * different proportions: the common case is a person whose account exists and
+ * whose key has lapsed or was never configured on this machine, and telling
+ * them to ask for access is telling them to queue behind a human for something
+ * they can do in a browser in thirty seconds.
+ */
+export const PORTAL_URL = "https://superdev-portal.vercel.app";
+
 export const ACCESS_REQUEST_URL =
   "https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml";
 
@@ -247,8 +258,10 @@ export function loadConfig(
         `    "role": "engineer",\n` +
         `    "keys": { "engineer": "pcat_live_...", "product-manager": "pcat_live_..." }\n` +
         `  }\n\n` +
-        `The hosted catalogue is invite-only while it is in beta. If you do\n` +
-        `not have a key yet, ask for one:\n` +
+        `If you have an account on the hosted catalogue, issue yourself a key:\n` +
+        `  ${PORTAL_URL}\n\n` +
+        `The catalogue is invite-only while it is in beta. If you do not have an\n` +
+        `account yet, ask for one:\n` +
         `  ${ACCESS_REQUEST_URL}\n\n` +
         `If you run your own catalogue, a key is minted with the owner database\n` +
         `credential this plugin deliberately does not hold:\n` +
