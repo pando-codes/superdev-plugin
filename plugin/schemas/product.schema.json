@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pando.codes/catalog/schemas/product.schema.json",
+  "title": "Product",
+  "description": "A Pando product. The unit within which Capabilities partition 100% of what the product can do; every weight normalization is per product. Source: supabase/migrations/002_product_and_capability.sql",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "key", "name", "created_at"],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "readOnly": true,
+      "description": "bigint GENERATED ALWAYS AS IDENTITY. Server-assigned; never supplied on insert."
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Stable slug, unique across products. Stored as citext, so uniqueness is CASE-INSENSITIVE. The kebab-case pattern is project convention (e.g. 'trenchcoat'), not a database CHECK."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name, e.g. 'Trenchcoat'."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "timestamptz, defaults to now()."
+    }
+  }
+}

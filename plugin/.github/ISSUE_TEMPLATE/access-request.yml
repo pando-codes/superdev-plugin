@@ -1,0 +1,82 @@
+name: Request access to the hosted catalog
+description: The catalog is invite-only while it is in beta. Ask for a key here.
+title: "Access request: <your product>"
+labels: ["access-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The plugin is free and public. The **catalog** it talks to is invite-only
+        for now, because each account is provisioned by hand — see
+        [what is not true yet](https://github.com/pando-codes/superdev-plugin#what-is-not-true-yet)
+        for why.
+
+        You will get back a product, a `product-manager` key, and an `engineer` key,
+        and a walk through `init` if you want one.
+
+        **Never paste an API key into an issue.** Nothing here should be a secret.
+
+  - type: input
+    id: product
+    attributes:
+      label: What are you building?
+      description: One line. It becomes your product's name in the catalog.
+      placeholder: A telemetry dashboard for Claude Code teams
+    validations:
+      required: true
+
+  - type: input
+    id: slug
+    attributes:
+      label: Preferred product slug
+      description: Lowercase, hyphenated. Yours if it is free.
+      placeholder: trenchcoat
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agents
+    attributes:
+      label: How many agents do you expect to run against it at once?
+      description: >
+        This decides how many keys you need and whether the work queue is the
+        part of this you actually want.
+      options:
+        - "One — I want the driven workflow, not a fleet"
+        - "Two or three"
+        - "More than three"
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do your agents get their work today?
+      description: >
+        Markdown files, an issue tracker, a prompt each time, nothing in
+        particular. There is no wrong answer — it tells us where this would sit
+        in what you already do.
+    validations:
+      required: true
+
+  - type: input
+    id: contact
+    attributes:
+      label: Where should we send the keys?
+      description: >
+        An email address. Keys are sent out of band, never in this issue, and
+        this issue is public — so put an address you are happy to publish, or
+        write "ask me" and we will comment here first.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: understood
+    attributes:
+      label: Before you file this
+      options:
+        - label: >
+            I understand the catalog has no terms of service or DPA yet, one
+            region, and no SLO, and I will not put anything in it that needs
+            those.
+          required: true

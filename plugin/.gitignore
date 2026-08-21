@@ -1,0 +1,8 @@
+node_modules/
+
+# The key lives here. The DIRECTORY is deliberately not ignored: superdev:init
+# writes .superdev/product.json, which binds this repository to its product and
+# is exactly the kind of thing the whole team should share. Ignoring the folder
+# would have quietly made that per-checkout, and the first symptom would be a
+# teammate's init creating a second product.
+.superdev/config.json

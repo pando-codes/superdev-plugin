@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pando.codes/catalog/schemas/capability.schema.json",
+  "title": "Capability",
+  "description": "One slice of a product's partition — a claim about part of what the product can do. Capabilities of a product are intended to be exhaustive and non-overlapping; the database cannot verify that (see coverage_review), so scope_boundary is mandatory as the cheap defence. Source: supabase/migrations/002_product_and_capability.sql",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "product_id",
+    "key",
+    "name",
+    "description",
+    "scope_boundary",
+    "status",
+    "visibility",
+    "created_at",
+    "updated_at",
+    "vbo"
+  ],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "readOnly": true,
+      "description": "bigint GENERATED ALWAYS AS IDENTITY."
+    },
+    "product_id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "FK -> product.id. IMMUTABLE after insert: a BEFORE UPDATE trigger rejects any change. To move a capability, create it under the new product and deprecate this one."
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Slug, unique per (product_id, key). Stored as citext, so uniqueness is CASE-INSENSITIVE. The kebab-case pattern is project convention (e.g. 'telemetry-capture'), not a database CHECK."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name, e.g. 'Telemetry Capture'."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this capability is, in the customer's terms. Distinct from scope_boundary, which says where it ends. Carries the text formerly held by value_prop, renamed in 020 because value proposition is a Feature property only — see feature.schema.json#/properties/value_prop, which is jsonb and means something else entirely. Source: supabase/migrations/020_capability_description.sql"
+    },
+    "scope_boundary": {
+      "type": "string",
+      "description": "What is IN and explicitly what is OUT. The only defence against overlapping capabilities, which would break the partition. Convention is an 'In: ... Out: ...' pair naming the neighbouring capabilities."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "active",
+        "deprecated",
+        "archived"
+      ],
+      "default": "active",
+      "description": "capability_status enum. 'proposed' scores 0 and is excluded from the product's vbo partition, so adding a capability never forces the rest to be rescored. 'archived' scores 0 because it offers nothing. Only 'active' and 'deprecated' may carry a positive vbo; deprecated keeps one so it can be tuned toward zero across a sunset. Source: supabase/migrations/017_capability_scoring.sql"
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "public"
+      ],
+      "default": "internal",
+      "description": "visibility enum. Gates exposure through v_capability_catalog."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "Maintained by the private.touch_updated_at() BEFORE UPDATE trigger; a client-supplied value is overwritten."
+    },
+    "vbo": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 0,
+      "description": "Vital Business Offering: this capability's authored share of the product, in percentage points. AUTHORED, never derived — compare against the capability_weight view to find drift between what a capability is supposed to carry and what it measurably does. The vbo of a product's ACTIVE capabilities sums to 100; that rule spans rows, so it is reported by v_model_health as 'vbo_does_not_sum' rather than enforced by a constraint. The per-row half IS enforced: a capability that is not active or deprecated must be 0."
+    }
+  },
+  "$comment": "KPIs are not properties here: a capability's measured metrics live in capability_kpi (capability_id, name), a junction rather than an array so 'which capabilities track this metric' is an indexed lookup."
+}

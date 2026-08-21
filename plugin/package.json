@@ -1,0 +1,19 @@
+{
+  "name": "@superdev/plugin",
+  "private": true,
+  "type": "module",
+  "description": "The Claude Code plugin: the client, and the method for using the catalogue.",
+  "scripts": {
+    "build": "bun build mcp/src/stdio.ts --target=node --outfile mcp/dist/stdio.js",
+    "test": "bun test",
+    "typecheck": "bunx tsc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}

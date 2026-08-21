@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pando.codes/catalog/schemas/acceptance-criterion.schema.json",
+  "title": "Acceptance Criterion",
+  "description": "A binary INSTRUCTION checking whether a feature does its job. Structured as three columns rather than prose so observability can be checked by machine. 'Never evaluated' is the ABSENCE of an ac_evaluation row, not a third verdict. Source: supabase/migrations/004_story_and_acceptance_criterion.sql",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "key", "given", "when_", "then_", "status", "created_at", "updated_at"],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "readOnly": true,
+      "description": "bigint GENERATED ALWAYS AS IDENTITY."
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^ac_[a-z0-9]{6}$",
+      "description": "Globally unique (not per product). The pattern IS a database CHECK: key::text ~ '^ac_[a-z0-9]{6}$'. Stored as citext, so uniqueness is case-insensitive, but the CHECK itself is case-sensitive — uppercase is rejected."
+    },
+    "given": {
+      "type": "string",
+      "description": "Precondition."
+    },
+    "when_": {
+      "type": "string",
+      "description": "Trigger. Named with a trailing underscore because 'when' is a reserved word in SQL; the underscore is part of the wire name too."
+    },
+    "then_": {
+      "type": "string",
+      "description": "Observable outcome. Trailing underscore for the same reason as when_."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "retired"],
+      "default": "active",
+      "description": "ac_status enum."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "readOnly": true,
+      "description": "Maintained by the private.touch_updated_at() trigger."
+    }
+  },
+  "$comment": "PARENTAGE NOT EXPRESSIBLE HERE: a criterion attaches to exactly one feature via feature_has_ac, which carries UNIQUE (criterion_id). Verdicts live in ac_evaluation (ac_verdict is pass|fail only), surfaced through latest_ac_state and feature_verified_state."
+}
