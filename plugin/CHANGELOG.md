@@ -11,6 +11,34 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.5.0 — 2026-08-21
+
+### Added
+
+- **The server now tells you when your key is about to stop working.** At startup it already asks
+  the catalogue who it is; that answer now carries the key's expiry, and if it is within 14 days
+  the server says so on stderr, next to where it reports which file the key came from.
+
+  This exists because of an asymmetry that cannot be fixed at the other end. When a key does
+  lapse, every call fails with `401 invalid, revoked, or expired API key` — deliberately
+  ambiguous, because saying which would confirm to a stranger that a key exists. That is right at
+  the API boundary and useless to the person whose agent has just stopped. The only moment anyone
+  can be told is while the key still works.
+
+  Keys default to 90 days, and keys minted in the same week expire in the same week — so without
+  this, a team onboarded together fails together, three months later, with a message that does not
+  say why.
+
+- **`catalog_whoami` reports `key.expires_at` and `key.expires_in_days`**, the latter computed
+  from the server's clock rather than yours. A machine whose clock has drifted would otherwise
+  disagree with the catalogue about whether its own credential is still good.
+
+  **Requires** the backend at migration 035 or later. Against an older one the field is absent and
+  the plugin stays silent — it will not warn about a credential on the strength of a field it
+  never received.
+
+  A key minted with `--no-expiry` reports `null`, which is a real state and not a missing value.
+
 ## 0.4.1 — 2026-08-20
 
 The first release distributed to people outside Pando. No tool changed; what changed is what

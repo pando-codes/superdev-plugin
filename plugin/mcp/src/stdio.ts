@@ -89,9 +89,15 @@ async function actualRole(apiUrl: string, apiKey: string, agentId: string): Prom
       );
       return undefined;
     }
-    const body = (await response.json()) as { pando_role?: unknown; writes?: { product_key?: unknown } };
+    const body = (await response.json()) as {
+      pando_role?: unknown;
+      writes?: { product_key?: unknown };
+      key?: { expires_in_days?: unknown };
+    };
     const scope = body.writes?.product_key;
     if (typeof scope === "string") note(`this key writes product "${scope}" and no other`);
+    const expiry = expiryWarning(body.key?.expires_in_days);
+    if (expiry !== undefined) note(expiry);
     return typeof body.pando_role === "string" ? body.pando_role : undefined;
   } catch (error) {
     note(
@@ -101,6 +107,47 @@ async function actualRole(apiUrl: string, apiKey: string, agentId: string): Prom
     );
     return undefined;
   }
+}
+
+/**
+ * How much warning is worth giving about a key that is about to stop working.
+ *
+ * Two weeks, because the fix is not something the holder can do themselves —
+ * a key is minted by whoever holds the catalogue's owner credential, so the
+ * window has to be long enough to ask someone else and wait.
+ */
+const EXPIRY_WARNING_DAYS = 14;
+
+/**
+ * Says so while the key still works, which is the only time anyone can be told.
+ *
+ * A lapsed key gets a 401 whose message deliberately will not say whether it
+ * was invalid, revoked, or expired — distinguishing them would confirm to a
+ * stranger that a key exists. That ambiguity is correct at the API boundary and
+ * completely useless to the person whose agent has just stopped, and this is the
+ * only place the difference can be surfaced without weakening it.
+ *
+ * The failure being prevented is not one bad afternoon. Keys minted in the same
+ * week expire in the same week, so a cohort onboarded together fails together,
+ * ninety days later, with the same uninformative message.
+ *
+ * `null` means a key that never expires, which is a real and deliberate option
+ * (`--no-expiry`) and not a missing value: it must warn about nothing at all.
+ * Anything else non-numeric — an older API with no `key` block at all — is also
+ * silence, because a client must not warn about a field the server never sent.
+ */
+export function expiryWarning(daysRaw: unknown): string | undefined {
+  // Returns the sentence rather than printing it, so the decision of WHAT to
+  // say is testable without capturing a stream. The caller does the printing.
+  if (typeof daysRaw !== "number" || !Number.isFinite(daysRaw)) return undefined;
+  const days = Math.round(daysRaw);
+  if (days > EXPIRY_WARNING_DAYS) return undefined;
+  return days <= 0
+    ? "this API key expires TODAY. Ask for a replacement now — when it lapses, " +
+        "every call fails with a 401 that will not say why."
+    : `this API key expires in ${days} day${days === 1 ? "" : "s"}. Ask for a ` +
+        "replacement before then: a lapsed key fails with a 401 that cannot tell " +
+        "you it was expiry rather than revocation.";
 }
 
 async function startConfigured({ config, warnings }: LoadResult): Promise<void> {

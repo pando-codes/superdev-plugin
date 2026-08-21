@@ -30810,11 +30810,23 @@ async function actualRole(apiUrl, apiKey, agentId) {
     const scope = body.writes?.product_key;
     if (typeof scope === "string")
       note(`this key writes product "${scope}" and no other`);
+    const expiry = expiryWarning(body.key?.expires_in_days);
+    if (expiry !== undefined)
+      note(expiry);
     return typeof body.pando_role === "string" ? body.pando_role : undefined;
   } catch (error51) {
     note(`could not reach ${apiUrl} to identify this key ` + `(${error51 instanceof Error ? error51.message : String(error51)}); ` + "offering every tool and letting the catalogue decide.");
     return;
   }
+}
+var EXPIRY_WARNING_DAYS = 14;
+function expiryWarning(daysRaw) {
+  if (typeof daysRaw !== "number" || !Number.isFinite(daysRaw))
+    return;
+  const days = Math.round(daysRaw);
+  if (days > EXPIRY_WARNING_DAYS)
+    return;
+  return days <= 0 ? "this API key expires TODAY. Ask for a replacement now — when it lapses, " + "every call fails with a 401 that will not say why." : `this API key expires in ${days} day${days === 1 ? "" : "s"}. Ask for a ` + "replacement before then: a lapsed key fails with a 401 that cannot tell " + "you it was expiry rather than revocation.";
 }
 async function startConfigured({ config: config2, warnings }) {
   if (config2.sources.length > 0)
@@ -30874,3 +30886,6 @@ async function main() {
   await startConfigured(loaded);
 }
 await main();
+export {
+  expiryWarning
+};
