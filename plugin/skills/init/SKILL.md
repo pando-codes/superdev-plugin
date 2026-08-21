@@ -22,15 +22,41 @@ everything below is pointless without them, and the fix is two environment varia
 anything you can do from inside the session.  See
 `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`.
 
-Creating a product needs **product-manager** or **head-of-engineering**, and an **unscoped**
-key.  `catalog_whoami` reports both:
+### Two ways to initialize, and `catalog_whoami` says which one you are in
 
-- a different `pando_role` — stop and say which key would be needed
-- `"writes": { "scope": "product", ... }` — this key is bound to an existing product and cannot
-  create one.  If it names *this* repository's product, the catalog is already initialized and
-  this skill should not be running; if it names another, stop and ask for the bootstrap key
+There are two, because there are two ways a product comes to exist. **Read the `writes` block
+before anything else** — it decides which of these you are doing, and getting it wrong means
+interviewing someone for half an hour and then being refused the write.
 
-Either way, stop before interviewing the user for a product you will not be allowed to write.
+| `catalog_whoami` says | What it means | What to do |
+|---|---|---|
+| `"writes": { "scope": "any" }` and role `product-manager` or `head-of-engineering` | An unscoped key. It may create the product itself | **Create-the-product path.** Continue to Step 1 |
+| `"writes": { "scope": "product", "product_key": "..." }` | A key bound to one product that **someone has already created** — the normal shape of a key issued by a hosted catalog | **Fill-in-the-product path.** See below |
+| A different `pando_role` | This key cannot write capabilities at all | Stop, and say which role would be needed |
+
+**Neither path is the exception.** A scoped key is what a hosted catalog issues, because an
+unscoped one could read and write every other customer's product; so for anyone who was given
+their keys rather than minting their own, the second row is the ordinary case.
+
+#### The fill-in-the-product path
+
+The product row exists and is empty. Your job is the capabilities, not the product.
+
+1. Call `catalog_list_capabilities` for the product named in `writes.product_key`.
+2. **If it has active capabilities**, this repository's catalog is already initialized. Report
+   the product and its capabilities, stop, and point at superdev:recalibrate.
+3. **If it has none**, this is a provisioned-but-empty product — exactly the state an operator
+   leaves behind after creating an account. Say so plainly, so the user is not left wondering why
+   a product they never made already exists. Then:
+   - write the binding at `.superdev/product.json` from `writes.product_key` (the format is under
+     *Record the binding*, below), and
+   - **skip Step 1 and Step 3's product write entirely.** Go to Step 2, and at Step 3 create only
+     the capabilities.
+
+A scoped key **cannot** create a product — the database refuses it, and correctly. Do not try it
+to find out, and do not ask the user for a different key: an unscoped key is one that can write
+every product in the catalog, and asking for one to get past this screen is asking for the wrong
+thing.
 
 ## Step 1: Refuse if THIS repository is already initialized
 
@@ -131,8 +157,12 @@ starting catalog than eight speculative ones — capabilities are cheap to add l
 
 ## Step 3: Write
 
-On approval, write the Product first with **`catalog_create_product`** (`key`, `name`), then
-each Capability with **`catalog_create_capability`**, passing the new product's `product_key`.
+**On the fill-in-the-product path, skip straight to the capabilities.** The product row already
+exists, `catalog_create_product` would be refused, and the product key to pass is the one
+`catalog_whoami` reported under `writes.product_key`.
+
+Otherwise write the Product first with **`catalog_create_product`** (`key`, `name`), then each
+Capability with **`catalog_create_capability`**, passing the new product's `product_key`.
 
 Per capability: `key`, `name`, `description`, `scope_boundary`, `vbo`,
 `status` = `active`, `visibility` = `internal`.
@@ -172,6 +202,11 @@ This is what Step 1 reads on any future run, and what every other skill uses to 
 queries to the right product.  **Write it in the same breath as the product row** — a product
 created without a binding leaves the repository looking uninitialized, and the next init would
 try to create it again.
+
+On the fill-in-the-product path there is no product row to write it beside, so write it as soon
+as you have confirmed the product is empty, before the interview. The same reasoning applies with
+more force: an interview that is interrupted halfway leaves the product exactly as it was, and the
+binding is what tells the next run it is resuming rather than starting.
 
 Commit it.  The binding is a fact about the repository, not a local preference.
 

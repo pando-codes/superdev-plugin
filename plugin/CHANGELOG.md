@@ -11,6 +11,24 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.5.1 — 2026-08-21
+
+### Fixed
+
+- **`superdev:init` works for a key that was issued to you.** It required an *unscoped* key,
+  because creating a product needs one — so anyone whose key was scoped to a single product, which
+  is what a hosted catalog issues, was stopped on the first screen and told their catalog was
+  already initialized. It was not: their product existed and was empty, which is exactly what an
+  operator leaves behind after setting up an account.
+
+  `init` now reads `catalog_whoami` first and takes one of two paths. With an unscoped key it
+  creates the product as before. With a scoped key it checks whether that product has any
+  capabilities, and if it has none, writes the repository binding and goes straight to the
+  interview — creating the capabilities, which a scoped key has always been allowed to do.
+
+  Nothing about what the database permits changed. The skill was asking for a privilege it did not
+  need.
+
 ## 0.5.0 — 2026-08-21
 
 ### Added
