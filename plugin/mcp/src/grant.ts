@@ -60,6 +60,7 @@ import {
   readEnv,
   ROLES,
   sanitizeAgentId,
+  withoutUnexpandedPlaceholders,
   type Role,
 } from "./config.ts";
 
@@ -158,9 +159,14 @@ export function pinnedRoleOf(env: NodeJS.ProcessEnv): Role | undefined {
  */
 export function loadGrant(
   pinnedRole: Role,
-  env: NodeJS.ProcessEnv = process.env,
+  rawEnv: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
 ): GrantLoad {
+  // See withoutUnexpandedPlaceholders. A pinned server is the case that fails
+  // worst without this: SUPERDEV_HOME, SUPERDEV_GRANT, and SUPERDEV_PRODUCT are
+  // all declared in plugin.json and all normally unset, and each one silences a
+  // file that would otherwise have supplied the right answer.
+  const env = withoutUnexpandedPlaceholders(rawEnv);
   const warnings: string[] = [];
   const sources: string[] = [];
 

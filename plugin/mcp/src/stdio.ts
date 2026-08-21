@@ -50,7 +50,14 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CatalogClient } from "./client.ts";
-import { ConfigError, isRole, loadConfig, type LoadResult, type Role } from "./config.ts";
+import {
+  ConfigError,
+  isRole,
+  loadConfig,
+  withoutUnexpandedPlaceholders,
+  type LoadResult,
+  type Role,
+} from "./config.ts";
 import {
   loadGrant,
   pinnedRoleOf,
@@ -59,6 +66,19 @@ import {
 } from "./grant.ts";
 import { resolveSurface } from "./roles.ts";
 import { createMcpServer } from "./server.ts";
+
+/**
+ * The environment this process was actually given, with unexpanded `${NAME}`
+ * placeholders removed — see withoutUnexpandedPlaceholders in config.ts for
+ * what they are and what they broke.
+ *
+ * Read once, at the top, and used everywhere below instead of process.env, so
+ * that "which environment did we decide from" has exactly one answer. loadConfig
+ * and loadGrant scrub again on the way in; that is deliberate belt-and-braces,
+ * because they are also called from tests and from a future caller who will not
+ * have read this comment.
+ */
+const ENV: NodeJS.ProcessEnv = withoutUnexpandedPlaceholders(process.env);
 
 const note = (line: string): void => {
   process.stderr.write(`superdev: ${line}\n`);
@@ -221,7 +241,7 @@ async function startUnconfigured(error: ConfigError, pinned?: Role): Promise<voi
   // any case: this server holds no key. Read straight from the environment
   // rather than from loadConfig, whose precedence is unchanged and which has
   // already thrown; an unparseable role is simply not a narrowing.
-  const declared = process.env.SUPERDEV_ROLE?.trim();
+  const declared = ENV.SUPERDEV_ROLE?.trim();
   const declaredRole: Role | undefined =
     pinned ??
     (declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined);
@@ -262,7 +282,7 @@ async function startUnconfigured(error: ConfigError, pinned?: Role): Promise<voi
  * the worse half to miss.
  */
 async function startPinnedFromConfiguredKey(pinned: Role, absent: ConfigError): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...process.env, SUPERDEV_ROLE: pinned };
+  const env: NodeJS.ProcessEnv = { ...ENV, SUPERDEV_ROLE: pinned };
   delete env.SUPERDEV_API_KEY;
   delete env.PANDO_CATALOG_API_KEY;
 
@@ -402,7 +422,7 @@ async function main(): Promise<void> {
   // paths this process is on.
   let pinned: Role | undefined;
   try {
-    pinned = pinnedRoleOf(process.env);
+    pinned = pinnedRoleOf(ENV);
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     await startUnconfigured(error);

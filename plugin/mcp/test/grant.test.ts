@@ -31,6 +31,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ConfigError } from "../src/config.ts";
 import {
+  DEFAULT_TTL_MINUTES,
   defaultAgentId,
   grantConfigPath,
   loadGrant,
@@ -312,5 +313,95 @@ describe("registering", () => {
       })) as unknown as typeof globalThis.fetch;
 
     await expect(registerAgent(config, fetchImpl)).rejects.toBeInstanceOf(RegistrationError);
+  });
+});
+
+describe("an environment full of unexpanded placeholders", () => {
+  /**
+   * WHAT BROKE, AND WHY IT IS TESTED HERE
+   *
+   * plugin.json declares every one of these variables as `"NAME": "${NAME}"`,
+   * which is how a plugin says "pass this through if the user exported it". When
+   * the user did not, the host passes the placeholder through LITERALLY. The
+   * environment beats the file at every one of these fields, so a literal
+   * placeholder does not merely fail — it silences the file that held the right
+   * answer.
+   *
+   * 0.6.0 shipped in exactly that state. Every pinned server tried to register
+   * against the URL `${SUPERDEV_API_URL}`, using `${SUPERDEV_GRANT}` as its
+   * grant, for a product literally named `${SUPERDEV_PRODUCT}` — while a
+   * perfectly good orchestrator.json sat unread, because SUPERDEV_HOME was a
+   * placeholder too and the file was looked for under a relative directory that
+   * cannot exist.
+   *
+   * The failure surfaced as "could not reach ${SUPERDEV_API_URL}", which points
+   * at the network. Nothing in it points at the environment.
+   */
+  const poisoned = {
+    SUPERDEV_API_URL: "${SUPERDEV_API_URL}",
+    SUPERDEV_GRANT: "${SUPERDEV_GRANT}",
+    PANDO_CATALOG_API_URL: "${PANDO_CATALOG_API_URL}",
+    PANDO_CATALOG_GRANT: "${PANDO_CATALOG_GRANT}",
+    SUPERDEV_AGENT_ID: "${SUPERDEV_AGENT_ID}",
+    SUPERDEV_PRODUCT: "${SUPERDEV_PRODUCT}",
+    SUPERDEV_PRODUCT_CONFIG: "${SUPERDEV_PRODUCT_CONFIG}",
+    SUPERDEV_KEY_TTL_MINUTES: "${SUPERDEV_KEY_TTL_MINUTES}",
+  };
+
+  test("the files still win, exactly as if the environment were empty", () => {
+    const home = scratch();
+    const project = scratch();
+    writeProduct(project, "reelmates");
+    writeGrantFile(home, { api_url: "https://api.test", grant: "pcat_live_fromfile" });
+
+    const { config, warnings } = loadGrant(
+      "engineer",
+      env({ ...poisoned, SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }),
+      project,
+    );
+
+    expect(config.apiUrl).toBe("https://api.test");
+    expect(config.grant).toBe("pcat_live_fromfile");
+    expect(config.productKey).toBe("reelmates");
+    expect(config.pinnedRole).toBe("engineer");
+    // A placeholder is an absent variable, so it earns neither the deprecation
+    // sentence the PANDO_CATALOG_* names get nor the complaint an unparseable
+    // TTL gets. Both would be the server blaming the user for the host's syntax.
+    expect(config.ttlMinutes).toBe(DEFAULT_TTL_MINUTES);
+    expect(warnings.join(" ")).not.toContain("SUPERDEV_KEY_TTL_MINUTES");
+    expect(warnings.join(" ")).not.toContain("is the old name");
+  });
+
+  test("a missing product still says the repository is unbound", () => {
+    // The placeholder previously SATISFIED this check, so the one message that
+    // tells someone what to do never fired and they got a network error instead.
+    const home = scratch();
+    const project = scratch();
+    writeGrantFile(home, { api_url: "https://api.test", grant: "pcat_live_fromfile" });
+
+    expect(() =>
+      loadGrant(
+        "engineer",
+        env({ ...poisoned, SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }),
+        project,
+      ),
+    ).toThrow(/not bound to a product/);
+  });
+
+  test("an agent id is derived rather than taken from the placeholder", () => {
+    // The id names the agent in every lease it takes, so a literal "${SUPERDEV_AGENT_ID}"
+    // would be the name two machines' agents both held.
+    const home = scratch();
+    const project = scratch();
+    writeProduct(project, "reelmates");
+    writeGrantFile(home, { api_url: "https://api.test", grant: "pcat_live_fromfile" });
+
+    const { config } = loadGrant(
+      "engineer",
+      env({ ...poisoned, SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }),
+      project,
+    );
+    expect(config.agentId).not.toContain("$");
+    expect(config.agentId).toContain("engineer");
   });
 });

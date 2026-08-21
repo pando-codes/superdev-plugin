@@ -21950,6 +21950,15 @@ function readJson(path) {
   return { raw, insecure };
 }
 var str = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+var UNEXPANDED = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
+function withoutUnexpandedPlaceholders(env) {
+  const scrubbed = { ...env };
+  for (const [name, value] of Object.entries(scrubbed)) {
+    if (typeof value === "string" && UNEXPANDED.test(value.trim()))
+      delete scrubbed[name];
+  }
+  return scrubbed;
+}
 var LEGACY_ENV_NAMES = {
   SUPERDEV_API_URL: "PANDO_CATALOG_API_URL",
   SUPERDEV_API_KEY: "PANDO_CATALOG_API_KEY",
@@ -21977,7 +21986,8 @@ function userConfigPath(env) {
   const home = str(env.SUPERDEV_HOME) ?? homedir();
   return join(home, ".superdev", "config.json");
 }
-function loadConfig(env = process.env, cwd = process.cwd()) {
+function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
+  const env = withoutUnexpandedPlaceholders(rawEnv);
   const warnings = [];
   const sources = [];
   const layers = [];
@@ -22120,7 +22130,8 @@ function pinnedRoleOf(env) {
   }
   return raw;
 }
-function loadGrant(pinnedRole, env = process.env, cwd = process.cwd()) {
+function loadGrant(pinnedRole, rawEnv = process.env, cwd = process.cwd()) {
+  const env = withoutUnexpandedPlaceholders(rawEnv);
   const warnings = [];
   const sources = [];
   const grantPath = grantConfigPath(env);
@@ -31005,6 +31016,7 @@ Claims from this session are recorded as "${options.agentId}".` : "")
 }
 
 // mcp/src/stdio.ts
+var ENV = withoutUnexpandedPlaceholders(process.env);
 var note = (line) => {
   process.stderr.write(`superdev: ${line}
 `);
@@ -31078,7 +31090,7 @@ function unusableClient() {
 async function startUnconfigured(error51, pinned) {
   note(error51.message);
   note("starting anyway with every tool registered — each one answers with those instructions " + "until a key is configured, because a plugin that vanishes is harder to fix than one " + "that explains itself.");
-  const declared = process.env.SUPERDEV_ROLE?.trim();
+  const declared = ENV.SUPERDEV_ROLE?.trim();
   const declaredRole = pinned ?? (declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined);
   const surface = resolveSurface(undefined, declaredRole);
   const server = createMcpServer(unusableClient(), {
@@ -31091,7 +31103,7 @@ ${error51.message}`
   note(`${surface.names.size} tools offered, none of which will work until a key is configured`);
 }
 async function startPinnedFromConfiguredKey(pinned, absent) {
-  const env = { ...process.env, SUPERDEV_ROLE: pinned };
+  const env = { ...ENV, SUPERDEV_ROLE: pinned };
   delete env.SUPERDEV_API_KEY;
   delete env.PANDO_CATALOG_API_KEY;
   let loaded;
@@ -31179,7 +31191,7 @@ async function startPinned(pinned) {
 async function main() {
   let pinned;
   try {
-    pinned = pinnedRoleOf(process.env);
+    pinned = pinnedRoleOf(ENV);
   } catch (error51) {
     if (!(error51 instanceof ConfigError))
       throw error51;

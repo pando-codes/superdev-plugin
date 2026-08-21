@@ -178,6 +178,42 @@ function readJson(path: string): { raw: RawConfig; insecure: boolean } | undefin
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 
+/** A value that is nothing but `${NAME}` — the whole of it, not a mention inside it. */
+const UNEXPANDED = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
+
+/**
+ * Drops environment entries whose value is an unexpanded `${NAME}` placeholder.
+ *
+ * WHY THIS EXISTS
+ *
+ * `plugin.json` declares each server's environment as `"SUPERDEV_API_URL":
+ * "${SUPERDEV_API_URL}"`, which is how a plugin says "pass this through if the
+ * user exported it". When the user did not export it, the host passes the
+ * placeholder through LITERALLY, and every reader below then treats the string
+ * `"${SUPERDEV_API_URL}"` as a configured value.
+ *
+ * That is not a cosmetic wrong answer. Environment beats file everywhere in
+ * this module and in grant.ts, so a literal placeholder does not merely fail —
+ * it SILENCES the file it was supposed to defer to. 0.6.0 shipped with all four
+ * servers in that state: `SUPERDEV_HOME` resolved to `${SUPERDEV_HOME}`, so the
+ * orchestrator grant was looked for under a relative directory that cannot
+ * exist and the real one was never read; `SUPERDEV_PRODUCT` satisfied the
+ * product-binding check, so the message that tells someone to bind their
+ * repository never fired. Every one of those failures pointed somewhere other
+ * than at the cause.
+ *
+ * Only a value that is EXACTLY a placeholder is dropped. A value that merely
+ * contains one is something a person typed, and guessing at what they meant is
+ * a worse failure than carrying it through to a message that quotes it back.
+ */
+export function withoutUnexpandedPlaceholders(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const scrubbed: NodeJS.ProcessEnv = { ...env };
+  for (const [name, value] of Object.entries(scrubbed)) {
+    if (typeof value === "string" && UNEXPANDED.test(value.trim())) delete scrubbed[name];
+  }
+  return scrubbed;
+}
+
 /**
  * The environment variable names, and the ones they used to have.
  *
@@ -257,9 +293,13 @@ export interface LoadResult {
  * makes the server unable to function throws instead.
  */
 export function loadConfig(
-  env: NodeJS.ProcessEnv = process.env,
+  rawEnv: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
 ): LoadResult {
+  // Scrubbed here rather than at the call sites, so that every path into this
+  // function is covered by construction — including the one in stdio.ts that
+  // builds its own environment object out of process.env.
+  const env = withoutUnexpandedPlaceholders(rawEnv);
   const warnings: string[] = [];
   const sources: string[] = [];
 

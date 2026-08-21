@@ -20,7 +20,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ACCESS_REQUEST_URL, ConfigError, loadConfig, PORTAL_URL, sanitizeAgentId } from "../src/config.ts";
+import {
+  ACCESS_REQUEST_URL,
+  ConfigError,
+  loadConfig,
+  PORTAL_URL,
+  sanitizeAgentId,
+  withoutUnexpandedPlaceholders,
+} from "../src/config.ts";
 
 const temps: string[] = [];
 
@@ -262,5 +269,58 @@ describe("who this process is in the queue", () => {
     expect(sanitizeAgentId("--nope")).toBe("nope");
     expect(sanitizeAgentId("!!!")).toBe("agent");
     expect(sanitizeAgentId("x".repeat(200))).toHaveLength(64);
+  });
+});
+
+describe("unexpanded placeholders in the environment", () => {
+  /**
+   * The unpinned `catalog` server's half of the same defect. Its plugin.json
+   * block declares SUPERDEV_ROLE, and an unexported one arrived as the literal
+   * "${SUPERDEV_ROLE}" — which is not a role, so loadConfig threw, and every
+   * tool in the session answered with `"${SUPERDEV_ROLE}" is not a role this
+   * catalogue defines`. The user had not named a role at all.
+   */
+  test("a placeholder role is no role, rather than an invalid one", () => {
+    const root = scratch();
+    writeConfig(root, { api_url: "https://api.test", api_key: "pcat_live_x" });
+
+    const { config } = loadConfig(
+      env({ SUPERDEV_ROLE: "${SUPERDEV_ROLE}", CLAUDE_PROJECT_DIR: root }),
+      root,
+    );
+    expect(config.declaredRole).toBeUndefined();
+    expect(config.apiKey).toBe("pcat_live_x");
+  });
+
+  test("a placeholder never outranks the file it was meant to defer to", () => {
+    const root = scratch();
+    writeConfig(root, { api_url: "https://api.test", api_key: "pcat_live_fromfile" });
+
+    const { config, warnings } = loadConfig(
+      env({
+        SUPERDEV_API_URL: "${SUPERDEV_API_URL}",
+        SUPERDEV_API_KEY: "${SUPERDEV_API_KEY}",
+        PANDO_CATALOG_API_URL: "${PANDO_CATALOG_API_URL}",
+        PANDO_CATALOG_API_KEY: "${PANDO_CATALOG_API_KEY}",
+        CLAUDE_PROJECT_DIR: root,
+      }),
+      root,
+    );
+    expect(config.apiUrl).toBe("https://api.test");
+    expect(config.apiKey).toBe("pcat_live_fromfile");
+    expect(warnings.join(" ")).not.toContain("is the old name");
+  });
+
+  test("a value that merely mentions one is carried through untouched", () => {
+    // Someone who typed this meant something by it, and quietly discarding it
+    // would be a second silent failure on top of the one being fixed here.
+    const scrubbed = withoutUnexpandedPlaceholders({
+      SUPERDEV_API_URL: "https://${host}.example",
+      SUPERDEV_API_KEY: "${SUPERDEV_API_KEY}",
+      SUPERDEV_ROLE: "engineer",
+    });
+    expect(scrubbed.SUPERDEV_API_URL).toBe("https://${host}.example");
+    expect(scrubbed.SUPERDEV_API_KEY).toBeUndefined();
+    expect(scrubbed.SUPERDEV_ROLE).toBe("engineer");
   });
 });
