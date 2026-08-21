@@ -1,6 +1,6 @@
 ---
 name: connect
-description: You MUST use this when the catalog_* tools answer with setup instructions instead of data, when they are missing from the session entirely, or when the user asks to configure, connect, or re-key superdev. Walks through putting an API key at the right scope - environment, project, or user - and verifying it.
+description: You MUST use this when the catalog_* tools answer with setup instructions instead of data, when they are missing from the session entirely, or when the user asks to configure, connect, or re-key superdev. Walks through putting an API key or an orchestrator grant at the right scope - environment, project, or user - and verifying it.
 ---
 
 # Connecting to the Catalog
@@ -24,6 +24,7 @@ things:
 | Setup instructions naming three paths | No key was found anywhere. This is the fresh-install case | Step 1 |
 | `401` / "the catalogue rejected this API key" | A key exists but the catalog will not accept it — revoked, expired, or from another environment | Step 1, with a replacement key |
 | The `catalog_*` tools are not in the session at all | The MCP server is not running, which is **not** a key problem | See "When there are no tools at all" |
+| Instructions naming an **orchestrator grant** and `mint-grant` | You called a role-pinned tool (`…catalog-engineer__…`) on a machine with no grant | Step 1G |
 
 When the answer is setup instructions, **show them to the user verbatim before doing anything
 else**. They name the exact three paths that were consulted on *this* machine, which is more
@@ -36,7 +37,7 @@ field** rather than the highest one winning outright:
 
 | | Where | Good for |
 |---|---|---|
-| 1 | `PANDO_CATALOG_API_URL` / `PANDO_CATALOG_API_KEY` in the environment | CI, a container, one-off runs |
+| 1 | `SUPERDEV_API_URL` / `SUPERDEV_API_KEY` in the environment | CI, a container, one-off runs |
 | 2 | `<project>/.superdev/config.json` | a repository that works as one role |
 | 3 | `~/.superdev/config.json` | your keys, wherever you are |
 
@@ -160,6 +161,66 @@ An unconfigured server is *not* this case: it starts, registers all of its tools
 every call with instructions. Tools that are present and complaining are a Step 1 problem; tools
 that are absent are this one.
 
+## Step 1G: The machine grant, when the tools are the role-pinned ones
+
+There are two kinds of credential now, and the fix depends on which one is missing.
+
+| | An **API key** | An **orchestrator grant** |
+|---|---|---|
+| Reaches | `mcp__…catalog__*` — the unpinned server | `mcp__…catalog-engineer__*` and its siblings |
+| Carries | one role, for as long as it lives | no role at all; it *mints* keys |
+| Can read the catalogue | yes | **no** — presented as a key it is simply not one |
+| Lives at | `~/.superdev/config.json` or a project's | `~/.superdev/orchestrator.json`, **user scope only** |
+| Who has one | anyone with a key from the portal | a machine that runs several agents at once |
+
+The grant is what makes an agent's role something it is **given**. One per machine; each agent
+registers with it at startup and gets its own short-lived key, bound to one role and one identity.
+An agent never sees a credential and never names a role — plugin.json pins the role per server,
+and the agent's `tools:` frontmatter names one server.
+
+**There is deliberately no project scope for a grant.** A repository that could carry one would be
+a repository that hands your machine the ability to manufacture credentials by being cloned.
+
+Minting is an operator action, like a key's:
+
+```sh
+cd apps/backend
+DATABASE_URL=… bun run mint-grant --org <account> --label "<this machine>" \
+    --roles agent_engineer,agent_quality_assurance,agent_product_manager
+```
+
+`--roles` is the **ceiling**, has no default, and is the whole point: a grant that cannot mint
+`agent_product_manager` cannot be talked into it by anything an agent says. Name only the roles
+this machine's agents are supposed to become.
+
+Then, at `~/.superdev/orchestrator.json`, mode 0600:
+
+```json
+{ "api_url": "https://pando-catalog-api.fly.dev", "grant": "pcat_live_…" }
+```
+
+The repository also needs `.superdev/product.json` (superdev:init writes it) — registration names
+a product, and the plugin refuses to guess one from the directory name.
+
+### If there is no grant and you do not want one yet
+
+A pinned server falls back to `keys.<role>` from `~/.superdev/config.json`. That is not an
+escalation: the key is chosen by the role the server is pinned to, never by the agent calling it.
+
+What it will **not** accept is a bare `api_key`, or an exported `SUPERDEV_API_KEY`. Those
+carry whatever role they happen to carry, and a server that offered the engineer's menu while
+holding the planner's authority would be lying about the one thing it exists to be honest about.
+So name the key by role, or mint a grant.
+
+### What the grant does not defend against
+
+An agent with `Bash` can read `~/.superdev/orchestrator.json` and call the register endpoint
+itself. Nothing stops that, and this skill should not pretend otherwise. What is prevented is an
+agent **choosing** a role through the tools it was given — which is the failure that actually
+happens, because it happens by reasoning rather than by intent. The defence against the other one
+is the grant's own scope: a narrow `--roles`, a short expiry, and one revocation that kills every
+key it ever minted.
+
 ## Running a fleet
 
 Several agents on one machine each need their own identity, not just their own key:
@@ -173,6 +234,12 @@ SUPERDEV_ROLE=quality-assurance SUPERDEV_AGENT_ID=verifier-1 claude
 A lease is held by an **identity**. Two agents sharing one can release and finish each other's
 work, and nothing errors when they do. Within a single session several subagents share one MCP
 server and therefore one identity, so pass a distinct `agent_id` on each work tool call instead.
+
+**With a grant, none of the above is necessary.** Each role-pinned server registers its own key,
+carrying its own identity, and the catalogue takes the identity from the CREDENTIAL rather than
+from the request — so `X-Pando-Agent-Id` cannot be used to reach a peer's lease, and the three
+roles coexist in one session without any per-call bookkeeping. `catalog_whoami` reports
+`agent_id_source`, which says which of the two arrangements you are in.
 
 ## What this skill must not do
 

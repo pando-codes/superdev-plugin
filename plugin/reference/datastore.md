@@ -13,7 +13,7 @@ The server needs an API URL and a key, resolved at three precedences, highest fi
 
 | | Where | Good for |
 |---|---|---|
-| 1 | `PANDO_CATALOG_API_URL` / `PANDO_CATALOG_API_KEY` in the environment | CI, one-off runs |
+| 1 | `SUPERDEV_API_URL` / `SUPERDEV_API_KEY` in the environment | CI, one-off runs |
 | 2 | `<project>/.superdev/config.json` | a repository that works as one role |
 | 3 | `~/.superdev/config.json` | your keys, wherever you are |
 

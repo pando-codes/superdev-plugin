@@ -76,7 +76,7 @@ export interface ServerOptions {
 
 export function createMcpServer(client: CatalogClient, options: ServerOptions = {}): McpServer {
   const server = new McpServer(
-    { name: "pando-catalog", version: "0.1.0" },
+    { name: "superdev-catalog", version: "0.1.0" },
     {
       instructions:
         "The Pando delivery-object catalogue: Capability -> Feature -> {User Story, " +

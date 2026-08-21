@@ -22,9 +22,19 @@
  * So configuration resolves at three precedences, and the environment stays the
  * highest of them — nothing that worked before stops working.
  *
- *   1. Environment       PANDO_CATALOG_API_URL / PANDO_CATALOG_API_KEY
+ *   1. Environment       SUPERDEV_API_URL / SUPERDEV_API_KEY
  *   2. Project scope     <project>/.superdev/config.json
  *   3. User scope        ~/.superdev/config.json
+ *
+ * WHY THE ENVIRONMENT VARIABLES HAVE TWO NAMES
+ *
+ * They used to be PANDO_CATALOG_*, from when this project was called
+ * pando-catalog. The project is superdev; the variables are SUPERDEV_*. The old
+ * names are still read, because they are sitting in shell profiles, CI
+ * definitions, and container manifests on machines this repository has no
+ * reach into — and a renamed variable that is silently ignored presents as a
+ * missing key, which is several steps from the cause. They warn on stderr and
+ * will keep working until there is a reason to stop them.
  *
  * Fields merge across levels rather than a whole level winning: a user-scope
  * file can hold the URL and the keys while a project-scope file names only which
@@ -107,6 +117,18 @@ export interface SuperdevConfig {
    */
   readonly declaredRole: Role | undefined;
   readonly agentId: string;
+  /**
+   * Whether `apiKey` came from `keys.<declaredRole>` rather than from a bare
+   * `api_key` or the environment.
+   *
+   * Exists for one caller: a role-pinned server (grant.ts) deciding whether it
+   * may use a configured key at all. Falling back to `keys.engineer` is safe for
+   * a server pinned to `engineer` — the key was chosen by the ROLE, not by the
+   * agent, which is the property that matters. Falling back to a bare `api_key`
+   * is not safe, because that key carries whatever role it happens to carry and
+   * the pinning would become a suggestion.
+   */
+  readonly keyedByRole: boolean;
   /** Every file that contributed, for `catalog_whoami`'s diagnostics. */
   readonly sources: readonly string[];
 }
@@ -155,6 +177,51 @@ function readJson(path: string): { raw: RawConfig; insecure: boolean } | undefin
 
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+
+/**
+ * The environment variable names, and the ones they used to have.
+ *
+ * Exported so grant.ts reads them the same way: two modules disagreeing about
+ * whether a legacy name is honoured would make "it works for the key but not
+ * the grant" a real and very confusing state.
+ */
+export const LEGACY_ENV_NAMES: Readonly<Record<string, string>> = {
+  SUPERDEV_API_URL: "PANDO_CATALOG_API_URL",
+  SUPERDEV_API_KEY: "PANDO_CATALOG_API_KEY",
+  SUPERDEV_GRANT: "PANDO_CATALOG_GRANT",
+};
+
+export interface EnvRead {
+  readonly value: string | undefined;
+  /** The superseded name this value came from, when it did. */
+  readonly deprecated: string | undefined;
+}
+
+/**
+ * Reads a SUPERDEV_* variable, falling back to the PANDO_CATALOG_* name it
+ * replaced.
+ *
+ * The current name wins outright when both are set, rather than the two being
+ * merged or the older one being treated as an error: someone mid-migration has
+ * both exported, and the one they just added is the one they meant.
+ */
+export function readEnv(env: NodeJS.ProcessEnv, name: string): EnvRead {
+  const current = str(env[name]);
+  if (current !== undefined) return { value: current, deprecated: undefined };
+  const legacyName = LEGACY_ENV_NAMES[name];
+  const legacy = legacyName === undefined ? undefined : str(env[legacyName]);
+  return legacy === undefined
+    ? { value: undefined, deprecated: undefined }
+    : { value: legacy, deprecated: legacyName };
+}
+
+/** The sentence a superseded variable earns. Shared so both modules say it identically. */
+export function deprecationWarning(legacyName: string, currentName: string): string {
+  return (
+    `${legacyName} is the old name for ${currentName}, from when this project was called ` +
+    `pando-catalog. It still works and will keep working; rename it when convenient.`
+  );
+}
 
 /**
  * Where the project-scope file is looked for.
@@ -222,7 +289,11 @@ export function loadConfig(
   }
   const declaredRole = declaredRoleRaw as Role | undefined;
 
-  const apiUrl = str(env.PANDO_CATALOG_API_URL) ?? str(merged.api_url);
+  const urlFromEnv = readEnv(env, "SUPERDEV_API_URL");
+  if (urlFromEnv.deprecated) {
+    warnings.push(deprecationWarning(urlFromEnv.deprecated, "SUPERDEV_API_URL"));
+  }
+  const apiUrl = urlFromEnv.value ?? str(merged.api_url);
 
   // A role picks its own key when one is configured for it. This is the whole
   // point of the `keys` map: one machine, several credentials, and the choice
@@ -234,9 +305,13 @@ export function loadConfig(
     return str((keys as Record<string, unknown>)[declaredRole]);
   })();
 
-  const apiKey = str(env.PANDO_CATALOG_API_KEY) ?? keyed ?? str(merged.api_key);
+  const keyFromEnv = readEnv(env, "SUPERDEV_API_KEY");
+  if (keyFromEnv.deprecated) {
+    warnings.push(deprecationWarning(keyFromEnv.deprecated, "SUPERDEV_API_KEY"));
+  }
+  const apiKey = keyFromEnv.value ?? keyed ?? str(merged.api_key);
 
-  if (declaredRole !== undefined && keyed === undefined && str(env.PANDO_CATALOG_API_KEY) === undefined) {
+  if (declaredRole !== undefined && keyed === undefined && keyFromEnv.value === undefined) {
     warnings.push(
       `role "${declaredRole}" was requested but no keys.${declaredRole} is configured, ` +
         "so the default api_key is being used. Its ACTUAL authority is whatever that key " +
@@ -248,7 +323,7 @@ export function loadConfig(
     const missing = [!apiUrl && "api_url", !apiKey && "api_key"].filter(Boolean).join(" and ");
     throw new ConfigError(
       `no ${missing} configured. Set it in one of, highest precedence first:\n` +
-        `  1. the environment: PANDO_CATALOG_API_URL / PANDO_CATALOG_API_KEY\n` +
+        `  1. the environment: SUPERDEV_API_URL / SUPERDEV_API_KEY\n` +
         `  2. this project:    ${projectConfigPath(env, cwd)}\n` +
         `  3. this user:       ${userConfigPath(env)}\n\n` +
         `A config file looks like:\n` +
@@ -275,6 +350,7 @@ export function loadConfig(
       apiUrl,
       apiKey,
       declaredRole,
+      keyedByRole: keyed !== undefined,
       agentId: resolveAgentId(env, merged, declaredRole),
       sources,
     },

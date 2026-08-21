@@ -95,7 +95,7 @@ var require_code = __commonJS((exports) => {
   }
   exports._ = _;
   var plus = new _Code("+");
-  function str2(strs, ...args) {
+  function str3(strs, ...args) {
     const expr = [safeStringify(strs[0])];
     let i = 0;
     while (i < args.length) {
@@ -106,7 +106,7 @@ var require_code = __commonJS((exports) => {
     optimize(expr);
     return new _Code(expr);
   }
-  exports.str = str2;
+  exports.str = str3;
   function addCodeArg(code, arg) {
     if (arg instanceof _Code)
       code.push(...arg._items);
@@ -149,7 +149,7 @@ var require_code = __commonJS((exports) => {
     return;
   }
   function strConcat(c1, c2) {
-    return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str2`${c1}${c2}`;
+    return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str3`${c1}${c2}`;
   }
   exports.strConcat = strConcat;
   function interpolate(x) {
@@ -1099,22 +1099,22 @@ var require_util = __commonJS((exports) => {
     return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
   }
   exports.schemaRefOrVal = schemaRefOrVal;
-  function unescapeFragment(str2) {
-    return unescapeJsonPointer(decodeURIComponent(str2));
+  function unescapeFragment(str3) {
+    return unescapeJsonPointer(decodeURIComponent(str3));
   }
   exports.unescapeFragment = unescapeFragment;
-  function escapeFragment(str2) {
-    return encodeURIComponent(escapeJsonPointer(str2));
+  function escapeFragment(str3) {
+    return encodeURIComponent(escapeJsonPointer(str3));
   }
   exports.escapeFragment = escapeFragment;
-  function escapeJsonPointer(str2) {
-    if (typeof str2 == "number")
-      return `${str2}`;
-    return str2.replace(/~/g, "~0").replace(/\//g, "~1");
+  function escapeJsonPointer(str3) {
+    if (typeof str3 == "number")
+      return `${str3}`;
+    return str3.replace(/~/g, "~0").replace(/\//g, "~1");
   }
   exports.escapeJsonPointer = escapeJsonPointer;
-  function unescapeJsonPointer(str2) {
-    return str2.replace(/~1/g, "/").replace(/~0/g, "~");
+  function unescapeJsonPointer(str3) {
+    return str3.replace(/~1/g, "/").replace(/~0/g, "~");
   }
   exports.unescapeJsonPointer = unescapeJsonPointer;
   function eachItem(xs, f) {
@@ -2098,8 +2098,8 @@ var require_json_schema_traverse = __commonJS((exports, module) => {
       post(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
     }
   }
-  function escapeJsonPtr(str2) {
-    return str2.replace(/~/g, "~0").replace(/\//g, "~1");
+  function escapeJsonPtr(str3) {
+    return str3.replace(/~/g, "~0").replace(/\//g, "~1");
   }
 });
 
@@ -2912,7 +2912,7 @@ var require_compile = __commonJS((exports) => {
     const schOrFunc = root.refs[ref];
     if (schOrFunc)
       return schOrFunc;
-    let _sch = resolve2.call(this, root, ref);
+    let _sch = resolve3.call(this, root, ref);
     if (_sch === undefined) {
       const schema = (_a3 = root.localRefs) === null || _a3 === undefined ? undefined : _a3[ref];
       const { schemaId } = this.opts;
@@ -2939,7 +2939,7 @@ var require_compile = __commonJS((exports) => {
   function sameSchemaEnv(s1, s2) {
     return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
   }
-  function resolve2(root, ref) {
+  function resolve3(root, ref) {
     let sch;
     while (typeof (sch = this.refs[ref]) == "string")
       ref = sch;
@@ -3145,10 +3145,10 @@ var require_utils = __commonJS((exports, module) => {
       return { host, isIPV6: false };
     }
   }
-  function findToken(str2, token) {
+  function findToken(str3, token) {
     let ind = 0;
-    for (let i = 0;i < str2.length; i++) {
-      if (str2[i] === token)
+    for (let i = 0;i < str3.length; i++) {
+      if (str3[i] === token)
         ind++;
     }
     return ind;
@@ -3525,7 +3525,7 @@ var require_fast_uri = __commonJS((exports, module) => {
     }
     return uri;
   }
-  function resolve2(baseURI, relativeURI, options) {
+  function resolve3(baseURI, relativeURI, options) {
     const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
     const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
     const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -3810,7 +3810,7 @@ var require_fast_uri = __commonJS((exports, module) => {
   var fastUri = {
     SCHEMES,
     normalize,
-    resolve: resolve2,
+    resolve: resolve3,
     resolveComponent,
     equal,
     serialize,
@@ -3866,7 +3866,7 @@ var require_core = __commonJS((exports) => {
   var util_1 = require_util();
   var $dataRefSchema = require_data();
   var uri_1 = require_uri();
-  var defaultRegExp = (str2, flags) => new RegExp(str2, flags);
+  var defaultRegExp = (str3, flags) => new RegExp(str3, flags);
   defaultRegExp.code = "new RegExp";
   var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
   var EXT_SCOPE_NAMES = new Set([
@@ -4628,16 +4628,16 @@ var require_multipleOf = __commonJS((exports) => {
 // ../../node_modules/.bun/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS((exports) => {
   Object.defineProperty(exports, "__esModule", { value: true });
-  function ucs2length(str2) {
-    const len = str2.length;
+  function ucs2length(str3) {
+    const len = str3.length;
     let length = 0;
     let pos = 0;
     let value;
     while (pos < len) {
       length++;
-      value = str2.charCodeAt(pos++);
+      value = str3.charCodeAt(pos++);
       if (value >= 55296 && value <= 56319 && pos < len) {
-        value = str2.charCodeAt(pos);
+        value = str3.charCodeAt(pos);
         if ((value & 64512) === 56320)
           pos++;
       }
@@ -6378,8 +6378,8 @@ var require_formats = __commonJS((exports) => {
   }
   var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
   var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  function date6(str2) {
-    const matches = DATE.exec(str2);
+  function date6(str3) {
+    const matches = DATE.exec(str3);
     if (!matches)
       return false;
     const year = +matches[1];
@@ -6398,8 +6398,8 @@ var require_formats = __commonJS((exports) => {
   }
   var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
   function getTime(strictTimeZone) {
-    return function time(str2) {
-      const matches = TIME.exec(str2);
+    return function time(str3) {
+      const matches = TIME.exec(str3);
       if (!matches)
         return false;
       const hr = +matches[1];
@@ -6445,8 +6445,8 @@ var require_formats = __commonJS((exports) => {
   var DATE_TIME_SEPARATOR = /t|\s/i;
   function getDateTime(strictTimeZone) {
     const time3 = getTime(strictTimeZone);
-    return function date_time(str2) {
-      const dateTime = str2.split(DATE_TIME_SEPARATOR);
+    return function date_time(str3) {
+      const dateTime = str3.split(DATE_TIME_SEPARATOR);
       return dateTime.length === 2 && date6(dateTime[0]) && time3(dateTime[1]);
     };
   }
@@ -6471,13 +6471,13 @@ var require_formats = __commonJS((exports) => {
   }
   var NOT_URI_FRAGMENT = /\/|:/;
   var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-  function uri(str2) {
-    return NOT_URI_FRAGMENT.test(str2) && URI.test(str2);
+  function uri(str3) {
+    return NOT_URI_FRAGMENT.test(str3) && URI.test(str3);
   }
   var BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
-  function byte(str2) {
+  function byte(str3) {
     BYTE.lastIndex = 0;
-    return BYTE.test(str2);
+    return BYTE.test(str3);
   }
   var MIN_INT32 = -(2 ** 31);
   var MAX_INT32 = 2 ** 31 - 1;
@@ -6491,11 +6491,11 @@ var require_formats = __commonJS((exports) => {
     return true;
   }
   var Z_ANCHOR = /[^\\]\\Z/;
-  function regex(str2) {
-    if (Z_ANCHOR.test(str2))
+  function regex(str3) {
+    if (Z_ANCHOR.test(str3))
       return false;
     try {
-      new RegExp(str2);
+      new RegExp(str3);
       return true;
     } catch (e) {
       return false;
@@ -21950,6 +21950,22 @@ function readJson(path) {
   return { raw, insecure };
 }
 var str = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+var LEGACY_ENV_NAMES = {
+  SUPERDEV_API_URL: "PANDO_CATALOG_API_URL",
+  SUPERDEV_API_KEY: "PANDO_CATALOG_API_KEY",
+  SUPERDEV_GRANT: "PANDO_CATALOG_GRANT"
+};
+function readEnv(env, name) {
+  const current = str(env[name]);
+  if (current !== undefined)
+    return { value: current, deprecated: undefined };
+  const legacyName = LEGACY_ENV_NAMES[name];
+  const legacy = legacyName === undefined ? undefined : str(env[legacyName]);
+  return legacy === undefined ? { value: undefined, deprecated: undefined } : { value: legacy, deprecated: legacyName };
+}
+function deprecationWarning(legacyName, currentName) {
+  return `${legacyName} is the old name for ${currentName}, from when this project was called ` + `pando-catalog. It still works and will keep working; rename it when convenient.`;
+}
 function projectConfigPath(env, cwd) {
   const explicit = str(env.SUPERDEV_CONFIG);
   if (explicit)
@@ -21981,7 +21997,11 @@ function loadConfig(env = process.env, cwd = process.cwd()) {
     throw new ConfigError(`"${declaredRoleRaw}" is not a role this catalogue defines. ` + `Known roles: ${ROLES.join(", ")}.`);
   }
   const declaredRole = declaredRoleRaw;
-  const apiUrl = str(env.PANDO_CATALOG_API_URL) ?? str(merged.api_url);
+  const urlFromEnv = readEnv(env, "SUPERDEV_API_URL");
+  if (urlFromEnv.deprecated) {
+    warnings.push(deprecationWarning(urlFromEnv.deprecated, "SUPERDEV_API_URL"));
+  }
+  const apiUrl = urlFromEnv.value ?? str(merged.api_url);
   const keyed = (() => {
     if (declaredRole === undefined)
       return;
@@ -21990,14 +22010,18 @@ function loadConfig(env = process.env, cwd = process.cwd()) {
       return;
     return str(keys[declaredRole]);
   })();
-  const apiKey = str(env.PANDO_CATALOG_API_KEY) ?? keyed ?? str(merged.api_key);
-  if (declaredRole !== undefined && keyed === undefined && str(env.PANDO_CATALOG_API_KEY) === undefined) {
+  const keyFromEnv = readEnv(env, "SUPERDEV_API_KEY");
+  if (keyFromEnv.deprecated) {
+    warnings.push(deprecationWarning(keyFromEnv.deprecated, "SUPERDEV_API_KEY"));
+  }
+  const apiKey = keyFromEnv.value ?? keyed ?? str(merged.api_key);
+  if (declaredRole !== undefined && keyed === undefined && keyFromEnv.value === undefined) {
     warnings.push(`role "${declaredRole}" was requested but no keys.${declaredRole} is configured, ` + "so the default api_key is being used. Its ACTUAL authority is whatever that key " + "carries — ask catalog_whoami rather than assuming the requested role was honoured.");
   }
   if (!apiUrl || !apiKey) {
     const missing = [!apiUrl && "api_url", !apiKey && "api_key"].filter(Boolean).join(" and ");
     throw new ConfigError(`no ${missing} configured. Set it in one of, highest precedence first:
-` + `  1. the environment: PANDO_CATALOG_API_URL / PANDO_CATALOG_API_KEY
+` + `  1. the environment: SUPERDEV_API_URL / SUPERDEV_API_KEY
 ` + `  2. this project:    ${projectConfigPath(env, cwd)}
 ` + `  3. this user:       ${userConfigPath(env)}
 
@@ -22026,6 +22050,7 @@ function loadConfig(env = process.env, cwd = process.cwd()) {
       apiUrl,
       apiKey,
       declaredRole,
+      keyedByRole: keyed !== undefined,
       agentId: resolveAgentId(env, merged, declaredRole),
       sources
     },
@@ -22043,6 +22068,194 @@ function sanitizeAgentId(value) {
   const cleaned = value.trim().replace(/[^A-Za-z0-9._:-]/g, "-").replace(/^[^A-Za-z0-9]+/, "");
   const trimmed = cleaned.slice(0, 64);
   return trimmed === "" ? "agent" : trimmed;
+}
+
+// mcp/src/grant.ts
+import { existsSync as existsSync2, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
+import { homedir as homedir2, hostname as hostname4 } from "node:os";
+import { isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "node:path";
+var DEFAULT_TTL_MINUTES = 720;
+var str2 = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+function grantConfigPath(env) {
+  const home = str2(env.SUPERDEV_HOME) ?? homedir2();
+  return join2(home, ".superdev", "orchestrator.json");
+}
+function productConfigPath(env, cwd) {
+  const explicit = str2(env.SUPERDEV_PRODUCT_CONFIG);
+  if (explicit)
+    return isAbsolute2(explicit) ? explicit : resolve2(cwd, explicit);
+  const projectDir = str2(env.CLAUDE_PROJECT_DIR) ?? cwd;
+  return join2(projectDir, ".superdev", "product.json");
+}
+function readJsonObject(path) {
+  if (!existsSync2(path))
+    return;
+  let text;
+  try {
+    text = readFileSync2(path, "utf8");
+  } catch (error51) {
+    throw new ConfigError(`${path} exists but could not be read: ${String(error51)}`);
+  }
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new ConfigError(`${path} is not valid JSON`);
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new ConfigError(`${path} must contain a JSON object`);
+  }
+  let insecure = false;
+  try {
+    insecure = (statSync2(path).mode & 63) !== 0;
+  } catch {}
+  return { raw, insecure };
+}
+function pinnedRoleOf(env) {
+  const raw = str2(env.SUPERDEV_PINNED_ROLE);
+  if (raw === undefined)
+    return;
+  if (!isRole(raw)) {
+    throw new ConfigError(`SUPERDEV_PINNED_ROLE is "${raw}", which is not a role this catalogue defines. ` + `Known roles: ${ROLES.join(", ")}. This is set by plugin.json, so a bad value ` + `here is a packaging bug rather than anything you can fix in a config file.`);
+  }
+  return raw;
+}
+function loadGrant(pinnedRole, env = process.env, cwd = process.cwd()) {
+  const warnings = [];
+  const sources = [];
+  const grantPath = grantConfigPath(env);
+  const found = readJsonObject(grantPath);
+  if (found) {
+    sources.push(grantPath);
+    if (found.insecure) {
+      warnings.push(`${grantPath} is readable by other users on this machine (mode is not 0600). ` + "It holds a credential that MINTS credentials, which is worse than a key " + `being exposed; run: chmod 600 ${grantPath}`);
+    }
+  }
+  const grantFromEnv = readEnv(env, "SUPERDEV_GRANT");
+  if (grantFromEnv.deprecated) {
+    warnings.push(deprecationWarning(grantFromEnv.deprecated, "SUPERDEV_GRANT"));
+  }
+  const grant = grantFromEnv.value ?? str2(found?.raw.grant);
+  const urlFromEnv = readEnv(env, "SUPERDEV_API_URL");
+  if (urlFromEnv.deprecated) {
+    warnings.push(deprecationWarning(urlFromEnv.deprecated, "SUPERDEV_API_URL"));
+  }
+  const apiUrl = urlFromEnv.value ?? str2(found?.raw.api_url);
+  if (!grant) {
+    throw new ConfigError(`no orchestrator grant configured, so the ${pinnedRole} server has no way to get ` + `a key of its own.
+
+` + `A grant is one credential per MACHINE. Every agent on it gets its own short-lived,
+` + `role-bound key, so a builder cannot act as a planner and two agents cannot take
+` + `each other's work. Put it at:
+
+` + `  ${grantPath}   (mode 0600)
+` + `  { "api_url": "https://pando-catalog-api.fly.dev", "grant": "pcat_live_..." }
+
+` + `Mint one with the owner database credential this plugin deliberately does not hold:
+` + `  cd apps/backend && DATABASE_URL=... bun run mint-grant \\
+` + `      --org <account> --label "<this machine>" \\
+` + `      --roles agent_engineer,agent_quality_assurance,agent_product_manager
+
+` + `Until then this server offers its tools and refuses every call. The single-key
+` + `arrangement still works: the unpinned "catalog" server reads config.json exactly
+` + `as it always has.`);
+  }
+  if (!apiUrl) {
+    throw new ConfigError(`${grantPath} has a grant but no api_url, and SUPERDEV_API_URL is not set. ` + `Add "api_url" beside the grant.`);
+  }
+  const productPath = productConfigPath(env, cwd);
+  const productFile = readJsonObject(productPath);
+  const productKey = str2(env.SUPERDEV_PRODUCT) ?? str2(productFile?.raw.product_key);
+  if (!productKey) {
+    throw new ConfigError(`this repository is not bound to a product, so there is nothing to register an ` + `agent against.
+
+` + `  ${productPath}
+` + `  { "product_key": "<the product this repository is>" }
+
+` + `superdev:init writes this file. Do not guess it from the directory name — a key ` + `bound to the wrong product writes nothing and says little about why.`);
+  }
+  if (productFile)
+    sources.push(productPath);
+  const ttlRaw = str2(env.SUPERDEV_KEY_TTL_MINUTES);
+  let ttlMinutes = DEFAULT_TTL_MINUTES;
+  if (ttlRaw !== undefined) {
+    const parsed = Number(ttlRaw);
+    if (!Number.isInteger(parsed) || parsed < 5 || parsed > 10080) {
+      warnings.push(`SUPERDEV_KEY_TTL_MINUTES is "${ttlRaw}", which is not a whole number of minutes ` + `between 5 and 10080; using ${DEFAULT_TTL_MINUTES}.`);
+    } else {
+      ttlMinutes = parsed;
+    }
+  }
+  return {
+    config: {
+      apiUrl,
+      grant,
+      pinnedRole,
+      productKey,
+      agentId: defaultAgentId(env, pinnedRole),
+      ttlMinutes,
+      sources
+    },
+    warnings
+  };
+}
+function defaultAgentId(env, role, pid = process.pid) {
+  const explicit = str2(env.SUPERDEV_AGENT_ID);
+  if (explicit)
+    return sanitizeAgentId(explicit);
+  const host = sanitizeAgentId(hostname4().split(".")[0] ?? "agent");
+  return sanitizeAgentId(`${host}-${role}-${pid}`);
+}
+
+class RegistrationError extends Error {
+  status;
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+async function registerAgent(config2, fetchImpl = globalThis.fetch, timeoutMs = 1e4) {
+  const url2 = `${config2.apiUrl.replace(/\/+$/, "")}/v1/agents/register`;
+  let response;
+  try {
+    response = await fetchImpl(url2, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config2.grant}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        product_key: config2.productKey,
+        role: config2.pinnedRole,
+        agent_id: config2.agentId,
+        ttl_minutes: config2.ttlMinutes
+      }),
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (error51) {
+    throw new RegistrationError(`could not reach ${config2.apiUrl} to register this agent ` + `(${error51 instanceof Error ? error51.message : String(error51)})`, undefined);
+  }
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body2 = await response.json();
+      if (typeof body2.message === "string")
+        detail = body2.message;
+    } catch {}
+    throw new RegistrationError(detail, response.status);
+  }
+  const body = await response.json();
+  const apiKey = str2(body.api_key);
+  if (!apiKey) {
+    throw new RegistrationError("the catalogue accepted the registration but returned no key", response.status);
+  }
+  return {
+    apiKey,
+    keyPrefix: str2(body.key_prefix) ?? "",
+    pandoRole: str2(body.pando_role) ?? config2.pinnedRole,
+    agentId: str2(body.agent_id) ?? config2.agentId,
+    expiresAt: str2(body.expires_at) ?? ""
+  };
 }
 // mcp/src/tools/evidence.ts
 var evidenceTools = [
@@ -28593,7 +28806,7 @@ class Protocol {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1000;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error51) {
@@ -28605,7 +28818,7 @@ class Protocol {
   }
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -28683,7 +28896,7 @@ class Protocol {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve3(parseResult.data);
           }
         } catch (error51) {
           reject(error51);
@@ -28874,12 +29087,12 @@ class Protocol {
         interval = task.pollInterval;
       }
     } catch {}
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve3, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -29724,7 +29937,7 @@ class McpServer {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5000;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -30742,7 +30955,7 @@ ${JSON.stringify(error51.details, null, 2)}` : "";
   };
 }
 function createMcpServer(client, options = {}) {
-  const server = new McpServer({ name: "pando-catalog", version: "0.1.0" }, {
+  const server = new McpServer({ name: "superdev-catalog", version: "0.1.0" }, {
     instructions: "The Pando delivery-object catalogue: Capability -> Feature -> {User Story, " + `Acceptance Criterion}, and whether those capabilities currently work.
 
 ` + "Two things to know before writing anything. First, the database enforces SHAPE, not " + "QUALITY — a capability whose scope_boundary reads 'stuff' satisfies every constraint " + "in the schema. The quality bar lives in each write tool's description; read it. " + "Second, authority is per-role: your key carries one pando_role, and a refusal is a " + `normal answer rather than a fault. Call catalog_whoami if a write is refused.
@@ -30793,7 +31006,7 @@ Claims from this session are recorded as "${options.agentId}".` : "")
 
 // mcp/src/stdio.ts
 var note = (line) => {
-  process.stderr.write(`pando-catalog-mcp: ${line}
+  process.stderr.write(`superdev: ${line}
 `);
 };
 async function actualRole(apiUrl, apiKey, agentId) {
@@ -30862,11 +31075,11 @@ function unusableClient() {
     }
   });
 }
-async function startUnconfigured(error51) {
+async function startUnconfigured(error51, pinned) {
   note(error51.message);
   note("starting anyway with every tool registered — each one answers with those instructions " + "until a key is configured, because a plugin that vanishes is harder to fix than one " + "that explains itself.");
   const declared = process.env.SUPERDEV_ROLE?.trim();
-  const declaredRole = declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined;
+  const declaredRole = pinned ?? (declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined);
   const surface = resolveSurface(undefined, declaredRole);
   const server = createMcpServer(unusableClient(), {
     toolNames: surface.names,
@@ -30877,7 +31090,106 @@ ${error51.message}`
   await server.connect(new StdioServerTransport);
   note(`${surface.names.size} tools offered, none of which will work until a key is configured`);
 }
+async function startPinnedFromConfiguredKey(pinned, absent) {
+  const env = { ...process.env, SUPERDEV_ROLE: pinned };
+  delete env.SUPERDEV_API_KEY;
+  delete env.PANDO_CATALOG_API_KEY;
+  let loaded;
+  try {
+    loaded = loadConfig(env);
+  } catch (error51) {
+    if (!(error51 instanceof ConfigError))
+      throw error51;
+    await startUnconfigured(new ConfigError(`${absent.message}
+
+Alternatively, configure a key for this role specifically:
+` + `  { "keys": { "${pinned}": "pcat_live_..." } }
+` + `A key chosen by the role is not the same as an agent choosing its role, so this
+` + `server will use one — but it will not use a bare "api_key", whose authority is
+` + `whatever that key happens to carry.`), pinned);
+    return;
+  }
+  if (!loaded.config.keyedByRole) {
+    await startUnconfigured(new ConfigError(`${absent.message}
+
+A key IS configured here, but not one belonging to the ` + `"${pinned}" role, so this server will not use it. Its authority is whatever that
+` + `key carries, which may be more than a ${pinned} should have — and a server that
+` + `offered the ${pinned} menu while holding something else would be lying about the
+` + `one thing it exists to be honest about.
+
+` + `Either mint a grant, or name the key by role:
+` + `  { "keys": { "${pinned}": "pcat_live_..." } }`), pinned);
+    return;
+  }
+  note(`no orchestrator grant found; using the configured keys.${pinned} instead. ` + "Each agent shares this one credential and therefore one identity — mint a grant " + "to give them their own.");
+  await startConfigured(loaded);
+}
+async function startPinned(pinned) {
+  let grant;
+  try {
+    grant = loadGrant(pinned);
+  } catch (error51) {
+    if (!(error51 instanceof ConfigError))
+      throw error51;
+    await startPinnedFromConfiguredKey(pinned, error51);
+    return;
+  }
+  if (grant.config.sources.length > 0) {
+    note(`configuration from ${grant.config.sources.join(", ")}`);
+  }
+  for (const warning of grant.warnings)
+    note(warning);
+  let registered;
+  try {
+    registered = await registerAgent(grant.config);
+  } catch (error51) {
+    if (!(error51 instanceof RegistrationError))
+      throw error51;
+    await startUnconfigured(new ConfigError(`registering this ${pinned} agent with the catalogue failed: ${error51.message}
+
+` + (error51.status === 401 ? `The machine's orchestrator grant was not accepted — it is unknown, revoked, or
+` + `expired. Mint a replacement; note that revoking a grant deliberately stops every
+` + `key it ever issued, so other agents on this machine will have stopped too.
+
+` : error51.status === 403 ? `This machine's grant exists but may not mint ${pinned} keys, or may not reach
+` + `the product "${grant.config.productKey}". Both are decided by the grant itself,
+` + `so the fix is a grant with a wider ceiling — not a change here.
+
+` : "") + `This server is starting with no credential rather than falling back to one
+` + `configured for a different role. An agent quietly acting as a role it was not
+` + "given is a worse outcome than an agent that cannot act at all."), pinned);
+    return;
+  }
+  const client = new CatalogClient({
+    baseUrl: grant.config.apiUrl,
+    apiKey: registered.apiKey,
+    agentId: registered.agentId
+  });
+  const surface = resolveSurface(registered.pandoRole, pinned);
+  const server = createMcpServer(client, {
+    toolNames: surface.names,
+    surfaceBasis: surface.basis,
+    agentId: registered.agentId
+  });
+  await server.connect(new StdioServerTransport);
+  note(`connected to ${grant.config.apiUrl}`);
+  note(`registered as "${registered.agentId}" for role "${registered.pandoRole}" on product ` + `"${grant.config.productKey}" (key ${registered.keyPrefix}, expires ${registered.expiresAt})`);
+  note(`${surface.names.size} tools offered, based on ${surface.basis}`);
+}
 async function main() {
+  let pinned;
+  try {
+    pinned = pinnedRoleOf(process.env);
+  } catch (error51) {
+    if (!(error51 instanceof ConfigError))
+      throw error51;
+    await startUnconfigured(error51);
+    return;
+  }
+  if (pinned !== undefined) {
+    await startPinned(pinned);
+    return;
+  }
   let loaded;
   try {
     loaded = loadConfig();

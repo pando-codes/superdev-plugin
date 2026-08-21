@@ -11,7 +11,7 @@ import type { ToolDefinition } from "./types.ts";
  * permission check here would be a third copy of an authority table that already
  * exists in exactly one correct place.
  *
- * Descriptions carry the quality bar the database cannot enforce. `pando-catalog`
+ * Descriptions carry the quality bar the database cannot enforce. the catalogue
  * enforces SHAPE, not QUALITY — `scope_boundary = 'stuff'` satisfies every
  * constraint in the schema. An agent reading only the schema would write records
  * that pass and are worthless, so the bar travels with the tool.

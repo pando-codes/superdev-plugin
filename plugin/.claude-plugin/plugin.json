@@ -1,23 +1,82 @@
 {
   "name": "superdev",
-  "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the pando-catalog and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
-  "version": "0.5.2",
+  "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the superdev catalogue and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
+  "version": "0.6.0",
   "author": {
     "name": "Alex",
     "email": "alex@pando.codes"
   },
   "mcpServers": {
-    "pando-catalog": {
+    "catalog": {
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
       ],
       "env": {
+        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
+        "SUPERDEV_API_KEY": "${SUPERDEV_API_KEY}",
         "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
         "PANDO_CATALOG_API_KEY": "${PANDO_CATALOG_API_KEY}",
         "SUPERDEV_ROLE": "${SUPERDEV_ROLE}",
         "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
         "SUPERDEV_CONFIG": "${SUPERDEV_CONFIG}",
+        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
+        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    },
+    "catalog-product-manager": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
+      ],
+      "env": {
+        "SUPERDEV_PINNED_ROLE": "product-manager",
+        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
+        "SUPERDEV_GRANT": "${SUPERDEV_GRANT}",
+        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
+        "PANDO_CATALOG_GRANT": "${PANDO_CATALOG_GRANT}",
+        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
+        "SUPERDEV_PRODUCT": "${SUPERDEV_PRODUCT}",
+        "SUPERDEV_PRODUCT_CONFIG": "${SUPERDEV_PRODUCT_CONFIG}",
+        "SUPERDEV_KEY_TTL_MINUTES": "${SUPERDEV_KEY_TTL_MINUTES}",
+        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
+        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    },
+    "catalog-engineer": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
+      ],
+      "env": {
+        "SUPERDEV_PINNED_ROLE": "engineer",
+        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
+        "SUPERDEV_GRANT": "${SUPERDEV_GRANT}",
+        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
+        "PANDO_CATALOG_GRANT": "${PANDO_CATALOG_GRANT}",
+        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
+        "SUPERDEV_PRODUCT": "${SUPERDEV_PRODUCT}",
+        "SUPERDEV_PRODUCT_CONFIG": "${SUPERDEV_PRODUCT_CONFIG}",
+        "SUPERDEV_KEY_TTL_MINUTES": "${SUPERDEV_KEY_TTL_MINUTES}",
+        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
+        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    },
+    "catalog-quality-assurance": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
+      ],
+      "env": {
+        "SUPERDEV_PINNED_ROLE": "quality-assurance",
+        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
+        "SUPERDEV_GRANT": "${SUPERDEV_GRANT}",
+        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
+        "PANDO_CATALOG_GRANT": "${PANDO_CATALOG_GRANT}",
+        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
+        "SUPERDEV_PRODUCT": "${SUPERDEV_PRODUCT}",
+        "SUPERDEV_PRODUCT_CONFIG": "${SUPERDEV_PRODUCT_CONFIG}",
+        "SUPERDEV_KEY_TTL_MINUTES": "${SUPERDEV_KEY_TTL_MINUTES}",
         "SUPERDEV_HOME": "${SUPERDEV_HOME}",
         "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
       }

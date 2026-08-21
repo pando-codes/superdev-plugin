@@ -51,11 +51,17 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CatalogClient } from "./client.ts";
 import { ConfigError, isRole, loadConfig, type LoadResult, type Role } from "./config.ts";
+import {
+  loadGrant,
+  pinnedRoleOf,
+  registerAgent,
+  RegistrationError,
+} from "./grant.ts";
 import { resolveSurface } from "./roles.ts";
 import { createMcpServer } from "./server.ts";
 
 const note = (line: string): void => {
-  process.stderr.write(`pando-catalog-mcp: ${line}\n`);
+  process.stderr.write(`superdev: ${line}\n`);
 };
 
 /**
@@ -197,7 +203,7 @@ function unusableClient(): CatalogClient {
   });
 }
 
-async function startUnconfigured(error: ConfigError): Promise<void> {
+async function startUnconfigured(error: ConfigError, pinned?: Role): Promise<void> {
   note(error.message);
   note(
     "starting anyway with every tool registered — each one answers with those instructions " +
@@ -205,14 +211,20 @@ async function startUnconfigured(error: ConfigError): Promise<void> {
       "that explains itself.",
   );
 
-  // SUPERDEV_ROLE still narrows, exactly as it does when the catalogue is
-  // unreachable — it may never widen, and there is nothing to widen here in any
-  // case: this server holds no key. Read straight from the environment rather
-  // than from loadConfig, whose precedence is unchanged and which has already
-  // thrown; an unparseable role is simply not a narrowing.
+  // A pinned server narrows to its own role even with no credential at all. The
+  // menu is then honest about what this server would be if it were working,
+  // which is what the agent reading it needs; showing the full surface would
+  // invite it to plan around tools this server is never going to offer.
+  //
+  // Otherwise SUPERDEV_ROLE still narrows, exactly as it does when the catalogue
+  // is unreachable — it may never widen, and there is nothing to widen here in
+  // any case: this server holds no key. Read straight from the environment
+  // rather than from loadConfig, whose precedence is unchanged and which has
+  // already thrown; an unparseable role is simply not a narrowing.
   const declared = process.env.SUPERDEV_ROLE?.trim();
   const declaredRole: Role | undefined =
-    declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined;
+    pinned ??
+    (declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined);
   const surface = resolveSurface(undefined, declaredRole);
 
   const server = createMcpServer(unusableClient(), {
@@ -228,7 +240,180 @@ async function startUnconfigured(error: ConfigError): Promise<void> {
   note(`${surface.names.size} tools offered, none of which will work until a key is configured`);
 }
 
+/**
+ * A pinned server on a machine with no grant, falling back to the key that was
+ * configured FOR ITS OWN ROLE.
+ *
+ * THE LINE THAT MUST HOLD
+ *
+ * `keys.engineer` is an acceptable credential for the server pinned to
+ * `engineer`, because the role picked the key. A bare `api_key` is NOT, because
+ * it carries whatever role it happens to carry — and a server that accepted one
+ * would offer the engineer's menu while holding the planner's authority, which
+ * is worse than offering nothing. `keyedByRole` is how the two are told apart,
+ * and every environment variable that could supply a bare key is removed before
+ * asking, because an exported shell variable is exactly the bare-key case
+ * wearing a different hat.
+ *
+ * BOTH names are deleted. SUPERDEV_API_KEY is the current one; PANDO_CATALOG_API_KEY
+ * is the name it had when this project was called pando-catalog, and config.ts
+ * still honours it. Deleting only one would leave the other as a way in — and it
+ * would be the OLD one, sitting in shell profiles nobody has revisited, which is
+ * the worse half to miss.
+ */
+async function startPinnedFromConfiguredKey(pinned: Role, absent: ConfigError): Promise<void> {
+  const env: NodeJS.ProcessEnv = { ...process.env, SUPERDEV_ROLE: pinned };
+  delete env.SUPERDEV_API_KEY;
+  delete env.PANDO_CATALOG_API_KEY;
+
+  let loaded: LoadResult;
+  try {
+    loaded = loadConfig(env);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    // Neither a grant nor a role-scoped key. Report the grant's message, which
+    // is the one that leads somewhere, with the other option named after it.
+    await startUnconfigured(
+      new ConfigError(
+        `${absent.message}\n\nAlternatively, configure a key for this role specifically:\n` +
+          `  { "keys": { "${pinned}": "pcat_live_..." } }\n` +
+          `A key chosen by the role is not the same as an agent choosing its role, so this\n` +
+          `server will use one — but it will not use a bare "api_key", whose authority is\n` +
+          `whatever that key happens to carry.`,
+      ),
+      pinned,
+    );
+    return;
+  }
+
+  if (!loaded.config.keyedByRole) {
+    await startUnconfigured(
+      new ConfigError(
+        `${absent.message}\n\nA key IS configured here, but not one belonging to the ` +
+          `"${pinned}" role, so this server will not use it. Its authority is whatever that\n` +
+          `key carries, which may be more than a ${pinned} should have — and a server that\n` +
+          `offered the ${pinned} menu while holding something else would be lying about the\n` +
+          `one thing it exists to be honest about.\n\n` +
+          `Either mint a grant, or name the key by role:\n` +
+          `  { "keys": { "${pinned}": "pcat_live_..." } }`,
+      ),
+      pinned,
+    );
+    return;
+  }
+
+  note(
+    `no orchestrator grant found; using the configured keys.${pinned} instead. ` +
+      "Each agent shares this one credential and therefore one identity — mint a grant " +
+      "to give them their own.",
+  );
+  await startConfigured(loaded);
+}
+
+/**
+ * A server whose role was pinned by plugin.json: it registers for that role with
+ * the machine's grant, and uses the key it is given.
+ *
+ * THE RULE THIS FUNCTION EXISTS TO KEEP
+ *
+ * Every failure path here ends in startUnconfigured, and NONE of them falls back
+ * to loadConfig(). A server pinned to `engineer` that could not register must
+ * hold no credential at all rather than whatever key config.json happens to
+ * carry — falling back would mean an agent acting as a role it was not given,
+ * arriving through a network failure nobody would think to test, which is the
+ * exact escalation the pinning exists to prevent.
+ */
+async function startPinned(pinned: Role): Promise<void> {
+  let grant;
+  try {
+    grant = loadGrant(pinned);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    // No grant on this machine. That is not automatically a dead end: a
+    // configured `keys.<role>` was already the arrangement before grants
+    // existed, and using it here is not an escalation, because the key is
+    // chosen by the ROLE this server is pinned to and never by the agent
+    // calling it. See startPinnedFromConfiguredKey for the line that must hold.
+    await startPinnedFromConfiguredKey(pinned, error);
+    return;
+  }
+
+  if (grant.config.sources.length > 0) {
+    note(`configuration from ${grant.config.sources.join(", ")}`);
+  }
+  for (const warning of grant.warnings) note(warning);
+
+  let registered;
+  try {
+    registered = await registerAgent(grant.config);
+  } catch (error) {
+    if (!(error instanceof RegistrationError)) throw error;
+    await startUnconfigured(
+      new ConfigError(
+        `registering this ${pinned} agent with the catalogue failed: ${error.message}\n\n` +
+          (error.status === 401
+            ? "The machine's orchestrator grant was not accepted — it is unknown, revoked, or\n" +
+              "expired. Mint a replacement; note that revoking a grant deliberately stops every\n" +
+              "key it ever issued, so other agents on this machine will have stopped too.\n\n"
+            : error.status === 403
+              ? `This machine's grant exists but may not mint ${pinned} keys, or may not reach\n` +
+                `the product "${grant.config.productKey}". Both are decided by the grant itself,\n` +
+                "so the fix is a grant with a wider ceiling — not a change here.\n\n"
+              : "") +
+          "This server is starting with no credential rather than falling back to one\n" +
+          "configured for a different role. An agent quietly acting as a role it was not\n" +
+          "given is a worse outcome than an agent that cannot act at all.",
+      ),
+      pinned,
+    );
+    return;
+  }
+
+  const client = new CatalogClient({
+    baseUrl: grant.config.apiUrl,
+    apiKey: registered.apiKey,
+    agentId: registered.agentId,
+  });
+
+  // No whoami round trip: the registration response already said which role the
+  // key carries, and it came from the same statement that minted it. The
+  // intersection is still taken, so a catalogue that somehow answered with a
+  // different role than was asked for narrows rather than widens.
+  const surface = resolveSurface(registered.pandoRole, pinned);
+
+  const server = createMcpServer(client, {
+    toolNames: surface.names,
+    surfaceBasis: surface.basis,
+    agentId: registered.agentId,
+  });
+
+  await server.connect(new StdioServerTransport());
+
+  note(`connected to ${grant.config.apiUrl}`);
+  note(
+    `registered as "${registered.agentId}" for role "${registered.pandoRole}" on product ` +
+      `"${grant.config.productKey}" (key ${registered.keyPrefix}, expires ${registered.expiresAt})`,
+  );
+  note(`${surface.names.size} tools offered, based on ${surface.basis}`);
+}
+
 async function main(): Promise<void> {
+  // Asked first, because it decides which of two entirely different credential
+  // paths this process is on.
+  let pinned: Role | undefined;
+  try {
+    pinned = pinnedRoleOf(process.env);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    await startUnconfigured(error);
+    return;
+  }
+
+  if (pinned !== undefined) {
+    await startPinned(pinned);
+    return;
+  }
+
   let loaded: LoadResult;
   try {
     loaded = loadConfig();

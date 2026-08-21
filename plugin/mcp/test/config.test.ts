@@ -49,12 +49,47 @@ afterEach(() => {
 describe("where configuration comes from", () => {
   test("the environment alone is enough, as it always was", () => {
     const { config } = loadConfig(
-      env({ PANDO_CATALOG_API_URL: "https://api.test", PANDO_CATALOG_API_KEY: "pcat_live_x" }),
+      env({ SUPERDEV_API_URL: "https://api.test", SUPERDEV_API_KEY: "pcat_live_x" }),
       scratch(),
     );
     expect(config.apiUrl).toBe("https://api.test");
     expect(config.apiKey).toBe("pcat_live_x");
     expect(config.sources).toEqual([]);
+  });
+
+  test("the PANDO_CATALOG_* names still work, and say they are the old ones", () => {
+    // They are sitting in shell profiles, CI definitions, and container
+    // manifests on machines this repository has no reach into. A renamed
+    // variable that is silently ignored presents as a missing key, several steps
+    // from the cause — so the old names keep working and explain themselves.
+    const { config, warnings } = loadConfig(
+      env({
+        PANDO_CATALOG_API_URL: "https://api.test",
+        PANDO_CATALOG_API_KEY: "pcat_live_legacy",
+      }),
+      scratch(),
+    );
+    expect(config.apiUrl).toBe("https://api.test");
+    expect(config.apiKey).toBe("pcat_live_legacy");
+    expect(warnings.join(" ")).toContain("PANDO_CATALOG_API_KEY is the old name");
+    expect(warnings.join(" ")).toContain("SUPERDEV_API_KEY");
+  });
+
+  test("the current name wins when both are exported, and says nothing about it", () => {
+    // Someone mid-migration has both. The one they just added is the one they
+    // meant, and warning about the other would be nagging rather than helping.
+    const { config, warnings } = loadConfig(
+      env({
+        SUPERDEV_API_URL: "https://new.test",
+        SUPERDEV_API_KEY: "pcat_live_new",
+        PANDO_CATALOG_API_URL: "https://old.test",
+        PANDO_CATALOG_API_KEY: "pcat_live_old",
+      }),
+      scratch(),
+    );
+    expect(config.apiUrl).toBe("https://new.test");
+    expect(config.apiKey).toBe("pcat_live_new");
+    expect(warnings).toEqual([]);
   });
 
   test("a user-scope file works with no environment at all", () => {
@@ -88,8 +123,8 @@ describe("where configuration comes from", () => {
     const { config } = loadConfig(
       env({
         SUPERDEV_HOME: home,
-        PANDO_CATALOG_API_URL: "https://env.test",
-        PANDO_CATALOG_API_KEY: "pcat_live_env",
+        SUPERDEV_API_URL: "https://env.test",
+        SUPERDEV_API_KEY: "pcat_live_env",
       }),
       project,
     );
@@ -150,8 +185,8 @@ describe("one machine, several roles", () => {
     expect(() =>
       loadConfig(
         env({
-          PANDO_CATALOG_API_URL: "https://api.test",
-          PANDO_CATALOG_API_KEY: "pcat_live_x",
+          SUPERDEV_API_URL: "https://api.test",
+          SUPERDEV_API_KEY: "pcat_live_x",
           SUPERDEV_ROLE: "wizard",
         }),
         scratch(),
@@ -168,7 +203,7 @@ describe("when it cannot be resolved", () => {
     } catch (error) {
       message = (error as Error).message;
     }
-    expect(message).toContain("PANDO_CATALOG_API_URL");
+    expect(message).toContain("SUPERDEV_API_URL");
     expect(message).toContain(".superdev/config.json");
     expect(message).toContain("mint-key");
     // And somewhere a reader who holds no database credential can actually go.
@@ -201,8 +236,8 @@ describe("who this process is in the queue", () => {
   test("an explicit id wins", () => {
     const { config } = loadConfig(
       env({
-        PANDO_CATALOG_API_URL: "https://api.test",
-        PANDO_CATALOG_API_KEY: "pcat_live_x",
+        SUPERDEV_API_URL: "https://api.test",
+        SUPERDEV_API_KEY: "pcat_live_x",
         SUPERDEV_AGENT_ID: "builder-07",
       }),
       scratch(),
@@ -212,8 +247,8 @@ describe("who this process is in the queue", () => {
 
   test("the default is stable across restarts, because a lease is held by an identity", () => {
     const args = env({
-      PANDO_CATALOG_API_URL: "https://api.test",
-      PANDO_CATALOG_API_KEY: "pcat_live_x",
+      SUPERDEV_API_URL: "https://api.test",
+      SUPERDEV_API_KEY: "pcat_live_x",
       SUPERDEV_ROLE: "engineer",
     });
     const first = loadConfig(args, scratch()).config.agentId;

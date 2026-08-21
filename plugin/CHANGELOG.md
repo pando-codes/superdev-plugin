@@ -11,6 +11,67 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.6.0 — 2026-08-21
+
+### Added
+
+- **Three role-pinned MCP servers**, alongside the one you already have:
+  `catalog-product-manager`, `catalog-engineer`, `catalog-quality-assurance`.
+  Each is launched with its role fixed in `plugin.json`, registers for that role and no other, and
+  holds its own credential. An agent reaches one of them by naming its namespace in `tools:` —
+  which means several agents of DIFFERENT roles can now work in one session, which was impossible
+  before.
+- **Orchestrator grants.** One credential per machine, at `~/.superdev/orchestrator.json`, which
+  can read and write nothing and exists only to mint short-lived role-bound keys for the agents on
+  that machine. Adding an agent then costs one line of frontmatter — no key to mint, no file to
+  write, no restart. See `docs/guides/registering-an-agent.md`.
+
+### Changed
+
+- **The shipped agents address their own role's server.** `superdev-engineer` now names
+  `mcp__plugin_superdev_catalog-engineer__*`, the planner and verifier likewise. An agent
+  able to reach two role servers is an agent able to choose between two authorities.
+- **`superdev:connect` knows about grants** — which of the two credentials is missing, where each
+  belongs, and why there is deliberately no project scope for a grant.
+- **Your identity can now come from your key.** With a grant, `catalog_whoami` reports
+  `agent_id_source: "credential"` and `X-Pando-Agent-Id` is ignored — two agents in one session can
+  no longer finish each other's work. Without one, nothing changes.
+
+### Renamed
+
+The project is superdev; the plugin was still calling things `pando-catalog`.
+
+- **Tool ids** are now `mcp__plugin_superdev_catalog__…` and
+  `mcp__plugin_superdev_catalog-<role>__…`. If you have written your own agent against these, its
+  `tools:` list needs the new names — the old ones no longer resolve to anything.
+- **Environment variables** are `SUPERDEV_API_URL`, `SUPERDEV_API_KEY`, `SUPERDEV_GRANT`. The
+  `PANDO_CATALOG_*` names still work and warn; nothing you have exported stops working.
+- **Log lines** on stderr are prefixed `superdev:`.
+
+`pando-catalog-api.fly.dev` and the `pcat_` key prefix are unchanged — your `api_url` and your keys
+are exactly as they were.
+
+### Requires
+
+The catalogue API deployed on or after 2026-08-21 (migration 039 and `POST /v1/agents/register`).
+Against an older API the pinned servers report that registration failed and start inert; the
+unpinned `catalog` server is unaffected.
+
+### If you are upgrading
+
+**Nothing to do** if `~/.superdev/config.json` names your keys by role:
+
+```json
+{ "keys": { "engineer": "pcat_live_…" } }
+```
+
+A pinned server uses the key for its own role, which is not an agent choosing a role.
+
+**Something to do** if you have only a bare `api_key`, or export `SUPERDEV_API_KEY`. The
+pinned servers will not use either — those carry whatever role they carry — so the three shipped
+agents will report that they are unconfigured. Name the key by role as above, or mint a grant.
+The unpinned `catalog` server, the skills, and everything you drive by hand are unchanged.
+
 ## 0.5.2 — 2026-08-21
 
 ### Changed

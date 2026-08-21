@@ -54,7 +54,7 @@ const scratch: string[] = [];
 /** The interpreter an installed plugin launches the bundle with. */
 async function runtime(): Promise<string> {
   const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-  return manifest.mcpServers["pando-catalog"].command;
+  return manifest.mcpServers["catalog"].command;
 }
 
 /** The build command as shipped, with its outfile pointed somewhere else. */
@@ -113,7 +113,7 @@ describe("the committed bundle", () => {
 
   test("exists where .claude-plugin/plugin.json says it does", async () => {
     const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-    const args: string[] = manifest.mcpServers["pando-catalog"].args;
+    const args: string[] = manifest.mcpServers["catalog"].args;
     // The manifest addresses it through ${CLAUDE_PLUGIN_ROOT}, which is the
     // plugin root at runtime; the tail of that path is what must exist here.
     expect(args.some((a) => a.endsWith("/mcp/dist/stdio.js"))).toBe(true);
@@ -157,8 +157,8 @@ describe("the committed bundle", () => {
       env: {
         PATH: process.env.PATH ?? "",
         // Never contacted: listing tools is answered by the server itself.
-        PANDO_CATALOG_API_URL: "http://catalog.invalid",
-        PANDO_CATALOG_API_KEY: "pcat_live_0000000000000000000000000000000000000000",
+        SUPERDEV_API_URL: "http://catalog.invalid",
+        SUPERDEV_API_KEY: "pcat_live_0000000000000000000000000000000000000000",
       },
     });
 
@@ -224,7 +224,7 @@ describe("the committed bundle", () => {
       expect(result.isError).toBe(true);
       // All three precedences, because the whole point of the message is that
       // the reader does not have to know which one applies to them.
-      expect(text).toContain("PANDO_CATALOG_API_URL");
+      expect(text).toContain("SUPERDEV_API_URL");
       expect(text).toContain(".superdev/config.json");
       // And how to get a key, since the repository that mints one is not the
       // repository the user is standing in.
@@ -285,7 +285,7 @@ describe("the committed bundle", () => {
 describe("the runtime an installed plugin needs", () => {
   test("is node — a plugin that requires bun on PATH fails at the install nobody watches", async () => {
     const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-    expect(manifest.mcpServers["pando-catalog"].command).toBe("node");
+    expect(manifest.mcpServers["catalog"].command).toBe("node");
   });
 
   test("is what the bundle is built for", async () => {

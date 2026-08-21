@@ -80,7 +80,7 @@ describe("an install with no key", () => {
     // the same distinction the API's own 403s get.
     expect(result.isError).toBe(true);
     // Every precedence, because the reader does not know which one applies.
-    expect(result.text).toContain("PANDO_CATALOG_API_URL");
+    expect(result.text).toContain("SUPERDEV_API_URL");
     expect(result.text).toContain(".superdev/config.json");
     // And how to obtain a key at all, since the repository that mints one is
     // not the repository they are standing in.
@@ -104,7 +104,7 @@ describe("an install with no key", () => {
       body: "Anything at all.",
     });
     expect(result.isError).toBe(true);
-    expect(result.text).toContain("PANDO_CATALOG_API_URL");
+    expect(result.text).toContain("SUPERDEV_API_URL");
   });
 
   test("sends nothing anywhere — it holds no key, so there is nothing to send", async () => {
