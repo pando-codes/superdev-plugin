@@ -22085,6 +22085,20 @@ import { existsSync as existsSync2, readFileSync as readFileSync2, statSync as s
 import { homedir as homedir2, hostname as hostname4 } from "node:os";
 import { isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "node:path";
 var DEFAULT_TTL_MINUTES = 720;
+
+class ProductBindingMissingError extends ConfigError {
+  apiUrl;
+  grant;
+  agentId;
+  productPath;
+  constructor(message, apiUrl, grant, agentId, productPath) {
+    super(message);
+    this.apiUrl = apiUrl;
+    this.grant = grant;
+    this.agentId = agentId;
+    this.productPath = productPath;
+  }
+}
 var str2 = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 function grantConfigPath(env) {
   const home = str2(env.SUPERDEV_HOME) ?? homedir2();
@@ -22178,12 +22192,12 @@ function loadGrant(pinnedRole, rawEnv = process.env, cwd = process.cwd()) {
   const productFile = readJsonObject(productPath);
   const productKey = str2(env.SUPERDEV_PRODUCT) ?? str2(productFile?.raw.product_key);
   if (!productKey) {
-    throw new ConfigError(`this repository is not bound to a product, so there is nothing to register an ` + `agent against.
+    throw new ProductBindingMissingError(`this repository is not bound to a product, so there is nothing to register an ` + `agent against.
 
 ` + `  ${productPath}
 ` + `  { "product_key": "<the product this repository is>" }
 
-` + `superdev:init writes this file. Do not guess it from the directory name — a key ` + `bound to the wrong product writes nothing and says little about why.`);
+` + `superdev:init writes this file. Do not guess it from the directory name — a key ` + `bound to the wrong product writes nothing and says little about why.`, apiUrl, grant, defaultAgentId(env, pinnedRole), productPath);
   }
   if (productFile)
     sources.push(productPath);
@@ -22268,792 +22282,42 @@ async function registerAgent(config2, fetchImpl = globalThis.fetch, timeoutMs = 
     expiresAt: str2(body.expires_at) ?? ""
   };
 }
-// mcp/src/tools/evidence.ts
-var evidenceTools = [
-  {
-    name: "catalog_record_evaluation",
-    title: "Record an evaluation",
-    description: `Record one evaluation of one acceptance criterion. Requires quality-assurance or ci.
-
-` + "APPEND-ONLY. There is no way to edit or delete an evaluation, and that is deliberate: " + "evaluation history must outlive the thing it evaluated. A mistaken evaluation is " + "corrected by recording a NEWER one — the model reads the most recent per criterion, so " + `the correction supersedes rather than rewrites.
-
-` + "The verdict is binary. 'Never evaluated' is the ABSENCE of a record, not a third value, " + `so do not record a placeholder for a check that did not run.
-
-` + "evaluated_at is when the check RAN, not when you are reporting it. Send the real one " + "for a run being uploaded after the fact, or the verification history is misdated.",
-    inputSchema: {
-      ac_key: exports_external.string().describe("e.g. 'ac_7bq1lm'."),
-      verdict: exports_external.enum(["pass", "fail"]),
-      method: exports_external.enum(["automated", "manual", "agent"]).describe("How it was checked. 'agent' means a model judged it."),
-      source: exports_external.string().describe("What produced this, e.g. 'ci:pytest' or a person's name."),
-      evaluated_at: exports_external.string().optional().describe("ISO 8601. Defaults to now."),
-      run_ref: exports_external.string().optional().describe("Link back to the run, e.g. a CI job URL."),
-      notes: exports_external.string().optional()
-    },
-    handler: async (client, args) => {
-      const { ac_key, ...payload } = args;
-      return (await client.post(`/v1/acceptance-criteria/${seg(ac_key)}/evaluations`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_record_evidence",
-    title: "Record an evidence window",
-    description: `Record one signal kind across a product for one window. Requires revops or ci.
-
-` + "SEND A ROW FOR EVERY ACTIVE CAPABILITY, INCLUDING THOSE MEASURING ZERO. This is the " + "one instruction that matters here, because getting it wrong fails silently: a signal " + "kind participates in capability weighting only once it has FULL coverage for the " + "window, so a batch that skips zero-activity capabilities never reaches it. The kind " + "never participates, every weight tied to it stays null, and NOTHING ERRORS — rows land " + "and the pipeline looks healthy. Call catalog_list_capabilities with status=active first " + `and send one entry per key it returns.
-
-` + "An incomplete batch is refused and names what is missing. allow_partial overrides that " + `and is rarely the right answer.
-
-` + "Full coverage is necessary, not sufficient: a window whose values are all zero is " + "excluded too, as is a kind carrying a zero coefficient in the product's weight policy. " + "Neither shows up as a model-health problem.",
-    inputSchema: {
-      product_key: exports_external.string(),
-      kind: exports_external.enum(["revenue", "active_users", "incidents", "support_tickets"]),
-      as_of: exports_external.string().describe("The window this measures, YYYY-MM-DD."),
-      source: exports_external.string().describe("What produced these numbers."),
-      signals: exports_external.array(exports_external.object({ capability_key: exports_external.string(), value: exports_external.number() })).min(1).describe("One entry per ACTIVE capability. Include zeros."),
-      allow_partial: exports_external.boolean().optional().describe("Accept a batch missing some active capabilities. Rarely correct.")
-    },
-    handler: async (client, args) => (await client.post("/v1/evidence-signals", args)).body
+async function provisionProduct(apiUrl, grant, input, fetchImpl = globalThis.fetch, timeoutMs = 1e4) {
+  const url2 = `${apiUrl.replace(/\/+$/, "")}/v1/orchestrator/products`;
+  let response;
+  try {
+    response = await fetchImpl(url2, {
+      method: "POST",
+      headers: { authorization: `Bearer ${grant}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        product_key: input.key,
+        name: input.name,
+        ...input.repo ? { repo: input.repo } : {},
+        ...input.repoPath ? { repo_path: input.repoPath } : {}
+      }),
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (error51) {
+    throw new RegistrationError(`could not reach ${apiUrl} to create the product ` + `(${error51 instanceof Error ? error51.message : String(error51)})`, undefined);
   }
-];
-
-// mcp/src/tools/links.ts
-var KINDS = {
-  "capability-feature": {
-    required: ["product_key", "capability_key", "feature_key"],
-    note: "A feature SERVES a capability. Link on value served, never on dependency. " + "Optionally carries cost_score and value_score, which are per-EDGE: the same " + "feature may cost and contribute differently to each capability it serves. " + "Re-linking an existing edge is how you attach them later, and omitting them " + "leaves any already recorded untouched. Leave them unset rather than guessing " + "— an unscored edge is honest, a zero claims the feature contributes nothing."
-  },
-  "feature-story": {
-    required: ["product_key", "feature_key", "story_key"],
-    note: "A story belongs to at most one feature; a second link is refused."
-  },
-  "feature-ac": {
-    required: ["product_key", "feature_key", "ac_key"],
-    note: "A criterion belongs to at most one feature; a second link is refused."
-  },
-  "capability-dependency": {
-    required: ["product_key", "from_capability_key", "to_capability_key", "kind_of_dependency"],
-    note: "from REQUIRES or DEGRADES_WITHOUT to. Both must be in the same product."
-  },
-  "work-item-feature": {
-    required: ["work_item_key", "product_key", "feature_key"],
-    note: "A wi_* work item targets a feature."
-  },
-  "work-item-ac": {
-    required: ["work_item_key", "ac_key"],
-    note: "A wi_* work item satisfies a criterion. Refused if the work item targets features and " + "the criterion belongs to none of them — the database does not check this, so the API does."
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body2 = await response.json();
+      if (typeof body2.message === "string")
+        detail = body2.message;
+    } catch {}
+    throw new RegistrationError(detail, response.status);
   }
-};
-var shape = {
-  kind: exports_external.enum(Object.keys(KINDS)).describe(Object.entries(KINDS).map(([k, v]) => `${k}: needs ${v.required.join(", ")}. ${v.note}`).join(`
-`)),
-  product_key: exports_external.string().optional(),
-  capability_key: exports_external.string().optional(),
-  feature_key: exports_external.string().optional(),
-  story_key: exports_external.string().optional(),
-  ac_key: exports_external.string().optional(),
-  from_capability_key: exports_external.string().optional(),
-  to_capability_key: exports_external.string().optional(),
-  work_item_key: exports_external.string().optional().describe("wi_ followed by six lowercase alphanumerics."),
-  cost_score: exports_external.number().min(0).optional().describe("Only for kind='capability-feature'. Per-edge, not per-feature."),
-  value_score: exports_external.number().min(0).optional().describe("Only for kind='capability-feature'. Per-edge, not per-feature."),
-  kind_of_dependency: exports_external.enum(["requires", "degrades_without"]).optional().describe("Only for kind='capability-dependency'.")
-};
-function payloadFor(args) {
-  const kind = args.kind;
-  const spec = KINDS[kind];
-  const missing = spec.required.filter((field) => args[field] === undefined);
-  if (missing.length > 0) {
-    throw new Error(`kind="${kind}" requires ${spec.required.join(", ")}; missing: ${missing.join(", ")}. ${spec.note}`);
+  const body = await response.json();
+  const productKey = str2(body.product_key);
+  if (!productKey) {
+    throw new RegistrationError("the catalogue accepted the request but named no product", response.status);
   }
-  switch (kind) {
-    case "capability-feature":
-      return {
-        path: "/v1/links/capability-feature",
-        payload: {
-          product_key: args.product_key,
-          capability_key: args.capability_key,
-          feature_key: args.feature_key,
-          ...args.cost_score === undefined ? {} : { cost_score: args.cost_score },
-          ...args.value_score === undefined ? {} : { value_score: args.value_score }
-        }
-      };
-    case "feature-story":
-      return {
-        path: "/v1/links/feature-story",
-        payload: {
-          product_key: args.product_key,
-          feature_key: args.feature_key,
-          story_key: args.story_key
-        }
-      };
-    case "feature-ac":
-      return {
-        path: "/v1/links/feature-ac",
-        payload: {
-          product_key: args.product_key,
-          feature_key: args.feature_key,
-          ac_key: args.ac_key
-        }
-      };
-    case "capability-dependency":
-      return {
-        path: "/v1/links/capability-dependency",
-        payload: {
-          product_key: args.product_key,
-          from_capability_key: args.from_capability_key,
-          to_capability_key: args.to_capability_key,
-          kind: args.kind_of_dependency
-        }
-      };
-    case "work-item-feature":
-      return {
-        path: "/v1/links/work-item-feature",
-        payload: {
-          work_item_key: args.work_item_key,
-          product_key: args.product_key,
-          feature_key: args.feature_key
-        }
-      };
-    case "work-item-ac":
-      return {
-        path: "/v1/links/work-item-ac",
-        payload: { work_item_key: args.work_item_key, ac_key: args.ac_key }
-      };
-  }
-}
-var linkTools = [
-  {
-    name: "catalog_link",
-    title: "Link two records",
-    description: `Create a link between two catalogue records. Requires product-manager.
-
-` + "Which fields are required depends on `kind` — see its description. Stories and " + "acceptance criteria are SIBLINGS under a feature, not parent and child: each links to " + "the feature independently, and there is no story-to-criterion link.",
-    inputSchema: shape,
-    handler: async (client, args) => {
-      const { path, payload } = payloadFor(args);
-      return (await client.post(path, payload)).body;
-    }
-  },
-  {
-    name: "catalog_unlink",
-    title: "Remove a link",
-    description: `Remove a link. Requires product-manager.
-
-` + "Unlinking is not deletion — a feature legitimately stops serving a capability, and " + "nothing in this model is ever hard-deleted. Note that removing a feature's LAST " + "capability is refused: the database does not hold an orphaned feature even briefly. " + "To retire a record, set its lifecycle field instead.",
-    inputSchema: shape,
-    annotations: { destructiveHint: true, idempotentHint: true },
-    handler: async (client, args) => {
-      const { path, payload } = payloadFor(args);
-      return (await client.delete(path, payload)).body;
-    }
-  }
-];
-
-// mcp/src/tools/reads.ts
-var productKey = exports_external.string().describe("Product slug, e.g. 'trenchcoat'.");
-var readTools = [
-  {
-    name: "catalog_whoami",
-    title: "Who is this key",
-    description: "Report which Postgres role and pando_role this API key carries, and what the " + "database sees for the connection a request runs on. Call this first when a write " + "is unexpectedly refused: the answer says which role you actually hold.",
-    inputSchema: {},
-    annotations: { readOnlyHint: true },
-    handler: async (client) => (await client.get("/v1/whoami")).body
-  },
-  {
-    name: "catalog_list_products",
-    title: "List products",
-    description: "List every product in the catalogue.",
-    inputSchema: {},
-    annotations: { readOnlyHint: true },
-    handler: async (client) => (await client.get("/v1/products")).body
-  },
-  {
-    name: "catalog_list_capabilities",
-    title: "List capabilities",
-    description: "List a product's capabilities. The capability set is the denominator for every " + "weight and coverage figure the model reports, so this is the partition, not a tag list.",
-    inputSchema: {
-      product_key: productKey,
-      status: exports_external.enum(["proposed", "active", "deprecated", "archived"]).optional().describe("Filter by lifecycle status. Omit for all.")
-    },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => {
-      const query = args.status ? `?status=${seg(args.status)}` : "";
-      return (await client.get(`/v1/products/${seg(args.product_key)}/capabilities${query}`)).body;
-    }
-  },
-  {
-    name: "catalog_get_capability",
-    title: "Get a capability",
-    description: "One capability with the features that serve it and its computed weight. " + "A null weight means 'not yet measurable', not 'worth nothing'.",
-    inputSchema: {
-      product_key: productKey,
-      capability_key: exports_external.string().describe("Capability slug. Unique per product, not globally.")
-    },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/capabilities/${seg(args.capability_key)}`)).body
-  },
-  {
-    name: "catalog_list_features",
-    title: "List features",
-    description: "List a product's features. Only 'active' features count toward verification and " + "coverage, so lifecycle_state is worth reading rather than skimming.",
-    inputSchema: {
-      product_key: productKey,
-      lifecycle_state: exports_external.enum(["proposed", "active", "deprecated", "removed"]).optional().describe("Filter by lifecycle state. Omit for all.")
-    },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => {
-      const query = args.lifecycle_state ? `?lifecycle_state=${seg(args.lifecycle_state)}` : "";
-      return (await client.get(`/v1/products/${seg(args.product_key)}/features${query}`)).body;
-    }
-  },
-  {
-    name: "catalog_get_feature",
-    title: "Get a feature",
-    description: "One feature with its stories, acceptance criteria, and verified state. Stories and " + "criteria are SIBLINGS under a feature, not parent and child — neither links through " + "the other.",
-    inputSchema: {
-      product_key: productKey,
-      feature_key: exports_external.string().describe("Feature slug. Unique per product, not globally.")
-    },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/features/${seg(args.feature_key)}`)).body
-  },
-  {
-    name: "catalog_get_story",
-    title: "Get a user story",
-    description: "One user story with its derived confidence. Confidence decays from last_reviewed_at, " + "so an accurate story that looks stale is as misleading as the reverse. " + "Story keys are GLOBAL — no product is needed to address one.",
-    inputSchema: { story_key: exports_external.string().describe("e.g. 'story_9f3k2a'.") },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/stories/${seg(args.story_key)}`)).body
-  },
-  {
-    name: "catalog_get_acceptance_criterion",
-    title: "Get an acceptance criterion",
-    description: "One acceptance criterion with its latest evaluation. 'Never evaluated' is the ABSENCE " + "of an evaluation, not a third verdict. Criterion keys are GLOBAL.",
-    inputSchema: { ac_key: exports_external.string().describe("e.g. 'ac_7bq1lm'.") },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/acceptance-criteria/${seg(args.ac_key)}`)).body
-  },
-  {
-    name: "catalog_model_health",
-    title: "Model health",
-    description: "Problems the model can detect in itself for one product — orphaned features, " + "partially populated signal kinds, overdue coverage reviews. The first thing to check " + "when a figure looks wrong.",
-    inputSchema: { product_key: productKey },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/model-health`)).body
-  },
-  {
-    name: "catalog_coverage",
-    title: "Coverage",
-    description: "A product's weighted verified share, and how many of its capabilities carry no weight. " + "A high unweighted count makes the share unrepresentative.",
-    inputSchema: { product_key: productKey },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/coverage`)).body
-  },
-  {
-    name: "catalog_public_catalog",
-    title: "Public catalogue",
-    description: "The GTM projection: public capabilities with their public feature counts. This is the " + "view intended to reach customers, so its contents are a claim you are making publicly.",
-    inputSchema: { product_key: productKey },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/catalog`)).body
-  }
-];
-
-// mcp/src/tools/work.ts
-var agentIdField = exports_external.string().min(1).max(64).optional().describe("Who is acting, if not this server's configured identity. Pass a distinct id " + "when several agents share one session — otherwise they are the same agent to " + "the catalogue and can release or finish each other's work by accident. It " + "changes WHO holds a claim, never WHAT this key is allowed to do.");
-var productKey2 = exports_external.string().describe("Product slug, from .superdev/product.json.");
-var workItemKey = exports_external.string().regex(/^wi_[a-z0-9]{6}$/, "wi_ followed by exactly six lowercase alphanumerics").describe("Work item key, e.g. wi_a1b2c3.");
-var workTools = [
-  {
-    name: "catalog_claim_work",
-    title: "Claim the next work item",
-    description: "Take the next piece of work addressed to THIS KEY'S ROLE in the given product, " + `and get the whole brief back in the same answer.
-
-` + "This is the first call of an autonomous run. What comes back is everything " + "needed to start without asking anyone: `intent` (why this work exists now), " + "`guidance` (how the author wants it done), `features` (each with the " + "capabilities it serves and the user stories that explain who it is for), " + "`must_satisfy` (the acceptance criteria this item is judged against), " + "`definition_of_done`, and `notes` (what previous agents said).\n\n" + `THREE THINGS TO KNOW BEFORE YOU LOOP ON THIS:
-
-` + "1. `claimed: null` IS SUCCESS. It means this role's queue is empty right now — " + "not that the product has no work, and not that anything failed. Stop and report " + `that; do not retry in a tight loop and do not go looking for work elsewhere.
-
-` + "2. WORK IS ADDRESSED TO A ROLE, and the role is your key's — you cannot ask for " + "another role's queue. An engineer will never be handed a quality-assurance item " + "even if it is the highest priority thing in the product. That is the design, not " + `a misconfiguration.
-
-` + "3. THE CLAIM IS A LEASE, not an assignment. It expires. Call " + "`catalog_heartbeat_work` while you work, and treat a lost lease as a full stop: " + "another agent may already have taken the item.",
-    inputSchema: {
-      product_key: productKey2,
-      lease_seconds: exports_external.number().int().min(30).max(86400).optional().describe("How long you are claiming it for, default 900. Ask for roughly how long " + "you expect the work to take and heartbeat rather than asking for hours: a " + "long lease on an agent that dies keeps the item out of the queue for that " + "whole time."),
-      work_item_key: workItemKey.optional().describe("Claim this specific item instead of the next one. A FILTER, never an " + "override — the same role, state, lease, and dependency rules still apply, " + "so naming an item you may not have returns claimed: null."),
-      agent_id: agentIdField
-    },
-    handler: async (client, args) => {
-      const { agent_id, ...payload } = args;
-      return (await client.post("/v1/work-items/claim", payload, agent_id)).body;
-    }
-  },
-  {
-    name: "catalog_list_work",
-    title: "List the work queue",
-    description: "See the queue without taking anything from it. Read-only, and it shows EVERY " + "role's work, not just yours — useful for reporting on what is outstanding and " + `for seeing what is blocked on whom.
-
-` + "`ready` is the field that matters: it is true when an item would actually be " + "handed out by a claim right now (open or lapsed, and its dependency finished). " + `An item that is not ready is not yours to start, whatever its priority says.
-
-` + "Ordering is priority ascending — SMALLER IS SOONER — then oldest first, which " + "is the same order a claim uses.",
-    inputSchema: {
-      product_key: productKey2,
-      role_required: exports_external.string().optional().describe("Filter to one role's queue, e.g. 'engineer'. Omit for all roles."),
-      state: exports_external.enum(["open", "claimed", "blocked", "done", "cancelled"]).optional().describe("Filter by state. Omit for all."),
-      ready: exports_external.boolean().optional().describe("True to show only items a claim would actually hand out now."),
-      limit: exports_external.number().int().min(1).max(500).optional().describe("Default 100.")
-    },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => {
-      const query = new URLSearchParams;
-      if (args.role_required)
-        query.set("role_required", args.role_required);
-      if (args.state)
-        query.set("state", args.state);
-      if (args.ready === true)
-        query.set("ready", "true");
-      if (args.limit)
-        query.set("limit", String(args.limit));
-      const qs = query.toString();
-      return (await client.get(`/v1/products/${seg(args.product_key)}/work-items${qs ? `?${qs}` : ""}`)).body;
-    }
-  },
-  {
-    name: "catalog_get_work",
-    title: "Read a work item's brief",
-    description: "The full brief for one work item — the same payload a claim returns, without " + "claiming anything. Use it to re-read your instructions mid-task, to check " + "whether an item you were about to start is still held by someone, or to read " + "the notes another agent left before you picked up its handoff.",
-    inputSchema: { work_item_key: workItemKey },
-    annotations: { readOnlyHint: true },
-    handler: async (client, args) => (await client.get(`/v1/work-items/${seg(args.work_item_key)}`)).body
-  },
-  {
-    name: "catalog_heartbeat_work",
-    title: "Extend your lease",
-    description: "Tell the catalogue you are still working on an item you hold, pushing its lease " + `out.
-
-` + "Call this whenever a step finishes and before anything long. A lapsed lease " + "returns the item to the queue, and another agent taking it is how the same work " + `gets done twice.
-
-` + "A 409 `lease_lost` means YOU NO LONGER HOLD THIS. Do not retry it and do not " + "keep working: stop, discard anything uncommitted that assumed you owned the " + "item, and claim again. The three causes — lapsed, taken by another agent, no " + "such item — are reported identically because there is nothing you would do " + "differently between them.",
-    inputSchema: {
-      work_item_key: workItemKey,
-      lease_seconds: exports_external.number().int().min(30).max(86400).optional().describe("Default 900."),
-      agent_id: agentIdField
-    },
-    handler: async (client, args) => {
-      const { work_item_key, agent_id, ...payload } = args;
-      return (await client.post(`/v1/work-items/${seg(work_item_key)}/heartbeat`, payload, agent_id)).body;
-    }
-  },
-  {
-    name: "catalog_push_progress",
-    title: "Push a progress note",
-    description: "Append a note to a work item you are holding. Notes are permanent and cannot be " + "edited — a note is what you observed at a moment, and one that could be revised " + `afterwards would be evidence of nothing.
-
-` + `Choose the kind honestly, because they are read for different reasons:
-` + `  progress — what is now done. The thing a human checking on a long run wants.
-` + `  decision — a choice you made and WHY you made it. The most valuable kind by a
-` + `             wide margin: it is the only record of why the code looks like this,
-` + `             and the next agent has no other way to recover it.
-` + `  blocker  — what stopped you. Write this BEFORE moving the item to blocked.
-` + `  handoff  — what the next agent needs to know. Write it before you release.
-
-` + "Write few and write them worth reading. A note per file touched is noise; a note " + "recording why you rejected the obvious approach is the reason this table exists.",
-    inputSchema: {
-      work_item_key: workItemKey,
-      kind: exports_external.enum(["progress", "decision", "blocker", "handoff"]),
-      body: exports_external.string().min(1).describe("What happened, in prose. Complete sentences."),
-      agent_id: agentIdField
-    },
-    handler: async (client, args) => {
-      const { work_item_key, agent_id, ...payload } = args;
-      return (await client.post(`/v1/work-items/${seg(work_item_key)}/notes`, payload, agent_id)).body;
-    }
-  },
-  {
-    name: "catalog_finish_work",
-    title: "Finish, block, or release a work item",
-    description: "Move an item you hold out of `claimed`, and say what happened. The outcome is " + "required for everything except a release, and it is read by whoever picks up " + `what you left.
-
-` + `  done      — the work is complete. TERMINAL: nothing reopens it, ever. Only use
-` + "              it when every criterion in `must_satisfy` is actually observable,\n" + `              not when the code merely exists.
-` + "  blocked   — you stopped and it needs someone else. Push a `blocker` note first\n" + `              with the detail; the outcome here is the one-line version.
-` + `  open      — you are giving it back untouched. Honest and cheap; an item you
-` + `              cannot do is better released than held under a lease nobody is
-` + "              working. Push a `handoff` note first if you learned anything.\n" + `  cancelled — the work should not be done at all. TERMINAL. This is a planning
-` + `              judgement; if you are the one building it, prefer blocked and say
-` + `              why, and let the planner decide.
-
-` + "RECORDING A VERDICT IS A DIFFERENT ACT. Finishing a work item says you did the " + "work; it does not say the criteria pass. That is `catalog_record_evaluation`, " + "and deliberately not yours if your role cannot call it.",
-    inputSchema: {
-      work_item_key: workItemKey,
-      state: exports_external.enum(["done", "blocked", "open", "cancelled"]),
-      outcome: exports_external.string().min(1).optional().describe("What happened, in one or two sentences. Required for done, blocked, and " + "cancelled. Write it for someone who was not here."),
-      agent_id: agentIdField
-    },
-    handler: async (client, args) => {
-      const { work_item_key, agent_id, ...payload } = args;
-      return (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload, agent_id)).body;
-    }
-  },
-  {
-    name: "catalog_file_work",
-    title: "File a work item",
-    description: "Put a piece of work on the queue for a role to pick up. Requires product-manager " + "or head-of-engineering — an agent that could file its own work would have a " + `to-do list rather than a backlog.
-
-` + "THE QUALITY BAR, WHICH THE DATABASE CANNOT ENFORCE. A work item whose intent " + "reads 'improve things' satisfies every constraint in the schema and is worthless " + `to the agent that claims it. What you write here IS the briefing:
-
-` + `  title    — one line, what will be true when this is done. Not a topic.
-` + `  intent   — why this work exists NOW. The catalogue already says what the
-` + `             feature is; this says why it is worth an agent's turn today. A
-` + `             criterion with no implementation, a verdict that came back failing,
-` + `             a capability whose weight moved. Name the thing that changed.
-` + `  guidance — how you want it done, where it differs from the obvious. Leave it
-` + `             out if there is nothing to say; empty guidance is better than
-` + `             restating the intent.
-
-` + "Then LINK IT. `catalog_link` with kind='work-item-feature' and " + "kind='work-item-ac' is what puts the stories and the acceptance criteria into " + "the brief. An unlinked work item hands the agent a sentence and no criteria, " + `which is the failure this whole model exists to prevent.
-
-` + "Address it to the role that does the work, not the role that wants it: building " + "is 'engineer', verifying is 'quality-assurance', planning is 'product-manager'.",
-    inputSchema: {
-      product_key: productKey2,
-      key: workItemKey.describe("wi_ plus six lowercase alphanumerics you choose, e.g. wi_7bq1lm. Must be unique."),
-      title: exports_external.string().min(1),
-      intent: exports_external.string().min(1),
-      guidance: exports_external.string().min(1).optional(),
-      role_required: exports_external.enum([
-        "product-manager",
-        "quality-assurance",
-        "engineer",
-        "ci",
-        "revops",
-        "head-of-engineering"
-      ]).describe("Which role may claim this."),
-      priority: exports_external.number().int().min(0).max(1000).optional().describe("SMALLER IS SOONER. Default 100, leaving room on both sides."),
-      depends_on_key: workItemKey.optional().describe("Another work item that must be `done` before this one is handed out. Use it " + "for genuine ordering, not for grouping — a dependency on something nobody " + "is doing makes this item invisible.")
-    },
-    handler: async (client, args) => {
-      const { product_key, ...payload } = args;
-      return (await client.post(`/v1/products/${seg(product_key)}/work-items`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_steward_work",
-    title: "Reprioritise or reword a work item",
-    description: "Change a work item's wording or its place in the queue without touching its " + `state. Requires product-manager or head-of-engineering.
-
-` + "What cannot be changed, by design: the role it is addressed to, and its product. " + "Both would re-address work an agent may be holding mid-flight. Cancel and re-file " + "instead.",
-    inputSchema: {
-      work_item_key: workItemKey,
-      title: exports_external.string().min(1).optional(),
-      intent: exports_external.string().min(1).optional(),
-      guidance: exports_external.string().min(1).optional(),
-      priority: exports_external.number().int().min(0).max(1000).optional().describe("Smaller is sooner.")
-    },
-    handler: async (client, args) => {
-      const { work_item_key, ...payload } = args;
-      return (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload)).body;
-    }
-  }
-];
-
-// mcp/src/tools/writes.ts
-var productKey3 = exports_external.string().describe("Product slug, e.g. 'trenchcoat'.");
-var valueProp = exports_external.object({
-  new_revenue: exports_external.array(exports_external.string()),
-  revenue_growth: exports_external.array(exports_external.string()),
-  cost_reduction: exports_external.array(exports_external.string())
-}).describe("All three headings are required, each an array (021 rejects a missing heading).");
-var costAssessment = exports_external.object({
-  cost: exports_external.array(exports_external.string()),
-  risk: exports_external.array(exports_external.string()),
-  uncertainty: exports_external.array(exports_external.string())
-}).describe("All three headings are required, each an array.");
-var featureScopeBoundary = exports_external.object({ in_scope: exports_external.array(exports_external.string()), out_of_scope: exports_external.array(exports_external.string()) }).describe("Both headings are required, each an array.");
-var writeTools = [
-  {
-    name: "catalog_create_product",
-    title: "Create a product",
-    description: "Create a product — the root of a catalogue, and the partition every capability, " + "feature, story, and criterion is scoped by. Requires product-manager or " + `head-of-engineering (026).
-
-` + "THIS IS A ONCE-PER-REPOSITORY OPERATION. There is deliberately no tool to rename or " + "delete a product, because the key scopes every other row in the catalogue: getting it " + "wrong is not something a later call can undo. Call catalog_list_products first and " + `confirm the product does not already exist under another name.
-
-` + "A second product for a repository that already has one silently SPLITS its catalogue — " + "nothing in the schema prevents it and nothing downstream will notice, because every " + `query scopes by product_id and will simply return the half it was pointed at.
-
-` + "The key is the durable identifier and belongs in .superdev/product.json; the name is " + "display text and is the only part worth agonising over less.",
-    inputSchema: {
-      key: exports_external.string().describe("kebab-case slug, globally unique, e.g. 'trenchcoat'. Permanent."),
-      name: exports_external.string().describe("Display name, e.g. 'Trenchcoat'.")
-    },
-    handler: async (client, args) => (await client.post("/v1/products", args)).body
-  },
-  {
-    name: "catalog_create_capability",
-    title: "Create a capability",
-    description: `Add a capability to a product. Requires product-manager.
-
-` + "A capability is a VALUE PROPOSITION, not a component — if you have named a component " + "you have written a Feature. Before calling this, check all four bars: a customer would " + "recognise it as something they get; two people given only the boundaries would assign " + "the same features to the same capabilities; every 'Out:' clause names a SIBLING " + "capability rather than a date or a roadmap ('at this time', 'currently', 'not yet' are " + `the tell); and no sibling's scope_boundary is made inaccurate by adding this one.
-
-` + "Adding a capability re-derives every sibling's weight share, so this is the most " + "expensive record in the model to get wrong.",
-    inputSchema: {
-      product_key: productKey3,
-      key: exports_external.string().describe("kebab-case slug, e.g. 'telemetry-capture'."),
-      name: exports_external.string(),
-      description: exports_external.string().describe("What this is, in the customer's terms."),
-      scope_boundary: exports_external.string().describe("'In: ... Out: ...' — every Out clause naming a neighbouring capability."),
-      status: exports_external.enum(["proposed", "active", "deprecated", "archived"]).optional(),
-      visibility: exports_external.enum(["internal", "public"]).optional(),
-      vbo: exports_external.number().min(0).max(100).optional()
-    },
-    handler: async (client, args) => {
-      const { product_key, ...payload } = args;
-      return (await client.post(`/v1/products/${seg(product_key)}/capabilities`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_update_capability",
-    title: "Update a capability",
-    description: `Revise a capability. Requires product-manager. Only the fields you send change.
-
-` + "Re-read every sibling's scope_boundary after changing one and confirm each is still " + "true — that is the step that gets skipped, and it is how a partition rots.",
-    inputSchema: {
-      product_key: productKey3,
-      capability_key: exports_external.string(),
-      name: exports_external.string().optional(),
-      description: exports_external.string().optional(),
-      scope_boundary: exports_external.string().optional(),
-      status: exports_external.enum(["proposed", "active", "deprecated", "archived"]).optional(),
-      visibility: exports_external.enum(["internal", "public"]).optional(),
-      vbo: exports_external.number().min(0).max(100).optional()
-    },
-    annotations: { idempotentHint: true },
-    handler: async (client, args) => {
-      const { product_key, capability_key, ...payload } = args;
-      return (await client.patch(`/v1/products/${seg(product_key)}/capabilities/${seg(capability_key)}`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_create_feature",
-    title: "Create a feature",
-    description: "Add a feature and link it to at least one capability, in one transaction. " + `Requires product-manager.
-
-` + "capability_keys is REQUIRED and must be non-empty: the database rejects a feature that " + `reaches commit unlinked, so there is no way to create one first and link it later.
-
-` + "Link on VALUE SERVED, not on dependency. A public API that authenticates with API keys " + "does not thereby serve team-administration — it depends on it. Every spurious link " + `widens blast-radius traversal until everything touches everything.
-
-` + "lifecycle_state must be honest: 'proposed' until it actually ships. Only 'active' " + "features count toward verification, so an optimistic 'active' reports as unverified " + "product and drags coverage down.",
-    inputSchema: {
-      product_key: productKey3,
-      key: exports_external.string().describe("kebab-case slug."),
-      name: exports_external.string(),
-      description: exports_external.string(),
-      capability_keys: exports_external.array(exports_external.string()).min(1).describe("Capabilities whose value this feature delivers. At least one."),
-      lifecycle_state: exports_external.enum(["proposed", "active", "deprecated", "removed"]).optional(),
-      visibility: exports_external.enum(["internal", "public"]).optional(),
-      value_prop: valueProp.optional(),
-      cost_assessment: costAssessment.optional(),
-      scope_boundary: featureScopeBoundary.optional()
-    },
-    handler: async (client, args) => {
-      const { product_key, ...payload } = args;
-      return (await client.post(`/v1/products/${seg(product_key)}/features`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_update_feature",
-    title: "Update a feature",
-    description: `Revise a feature. Requires product-manager. Only the fields you send change.
-
-` + "lifecycle_state is the field with consequences. Only 'active' features count toward " + "verification and coverage, so promoting one to 'active' before it ships reports as " + "unverified product and drags the coverage figure down until it is either built or " + "demoted — and the number it drags down is the one anyone reads to decide what to build " + `next.
-
-` + "value_prop, cost_assessment, and scope_boundary are WHOLE-OBJECT replacements, not " + "merges. Sending scope_boundary with only in_scope discards out_of_scope; read the " + `current value first and send it back complete.
-
-` + "To retire a feature, move lifecycle_state to 'deprecated' or 'removed'. There is no " + "delete, here or in the database: verification history has to outlive the thing it " + "evaluated.",
-    inputSchema: {
-      product_key: productKey3,
-      feature_key: exports_external.string(),
-      name: exports_external.string().optional(),
-      description: exports_external.string().optional(),
-      lifecycle_state: exports_external.enum(["proposed", "active", "deprecated", "removed"]).optional(),
-      visibility: exports_external.enum(["internal", "public"]).optional(),
-      value_prop: valueProp.optional(),
-      cost_assessment: costAssessment.optional(),
-      scope_boundary: featureScopeBoundary.optional()
-    },
-    annotations: { idempotentHint: true },
-    handler: async (client, args) => {
-      const { product_key, feature_key, ...payload } = args;
-      return (await client.patch(`/v1/products/${seg(product_key)}/features/${seg(feature_key)}`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_create_story",
-    title: "Create a user story",
-    description: "Add a user story, optionally linked to a feature in the same transaction. " + `Requires product-manager.
-
-` + "The `want` must survive a redesign — it is the user's desire, not the screen. " + "'to see each session's cost broken down by component type' IS the feature and goes " + "stale on a redesign; 'to know which parts of a session are responsible for its cost' " + `does not.
-
-` + "The `benefit` must be a RESULT, not the want restated. 'so that I can see the " + `dashboard' restates; 'so that I can tell which components drive cost' is a result.
-
-` + "A story is never 'done', only accurate or stale. Delivery lives in wi_* work items.",
-    inputSchema: {
-      key: exports_external.string().describe("story_ followed by six lowercase alphanumerics."),
-      product_key: productKey3,
-      role: exports_external.string().describe("Who wants this, e.g. 'engineer investigating a costly session'."),
-      want: exports_external.string(),
-      benefit: exports_external.string(),
-      status: exports_external.enum(["current", "stale", "retired"]).optional(),
-      last_reviewed_at: exports_external.string().optional().describe("ISO 8601. Confidence decays from here — set it when you revise."),
-      importance: exports_external.number().min(0).optional(),
-      feature_key: exports_external.string().optional().describe("Link to this feature in the same transaction.")
-    },
-    handler: async (client, args) => (await client.post("/v1/stories", args)).body
-  },
-  {
-    name: "catalog_update_story",
-    title: "Update a user story",
-    description: `Revise a story. Requires product-manager. Only the fields you send change.
-
-` + "Set last_reviewed_at when you revise. Leaving it untouched is the most common mistake " + "here: confidence decays from that timestamp, and an accurate story that looks stale is " + "as misleading as the reverse.",
-    inputSchema: {
-      story_key: exports_external.string(),
-      role: exports_external.string().optional(),
-      want: exports_external.string().optional(),
-      benefit: exports_external.string().optional(),
-      status: exports_external.enum(["current", "stale", "retired"]).optional(),
-      last_reviewed_at: exports_external.string().optional().describe("ISO 8601."),
-      importance: exports_external.number().min(0).optional()
-    },
-    annotations: { idempotentHint: true },
-    handler: async (client, args) => {
-      const { story_key, ...payload } = args;
-      return (await client.patch(`/v1/stories/${seg(story_key)}`, payload)).body;
-    }
-  },
-  {
-    name: "catalog_create_acceptance_criterion",
-    title: "Create an acceptance criterion",
-    description: "Add an acceptance criterion, optionally linked to a feature in the same transaction. " + `Requires product-manager.
-
-` + "Four bars, and the second is the one authors skip: NAME THE BUG THIS WOULD CATCH, then " + "check the `given` actually reaches it. A criterion only discriminates if the correct " + "and the broken implementation produce DIFFERENT results under the setup you wrote. Most " + "unfalsifiable criteria have a fine `then` and a `given` describing a case where both " + `behaviours look identical.
-
-` + "It must also be checkable by someone else without asking what you meant, verify purpose " + "rather than presentation (criteria bound to the current UI shatter on the next refactor " + "and get retired, quietly eroding coverage), and be binary — no 'works well' or " + `'fast enough'.
-
-` + "Bars 2 and 3 pull against each other. Moving a criterion off presentation usually leaves " + "the `then` intact and quietly stops the `given` from discriminating; the repair is in " + "the `given`, not the `then`.",
-    inputSchema: {
-      key: exports_external.string().describe("ac_ followed by six lowercase alphanumerics."),
-      product_key: productKey3,
-      given: exports_external.string().describe("The setup. This is where falsifiability is usually lost."),
-      when_: exports_external.string().describe("Trailing underscore: 'when' is a reserved word."),
-      then_: exports_external.string().describe("The assertion. Trailing underscore: 'then' is reserved."),
-      status: exports_external.enum(["active", "retired"]).optional(),
-      feature_key: exports_external.string().optional().describe("Link to this feature in the same transaction.")
-    },
-    handler: async (client, args) => (await client.post("/v1/acceptance-criteria", args)).body
-  },
-  {
-    name: "catalog_update_acceptance_criterion",
-    title: "Update an acceptance criterion",
-    description: `Revise a criterion. Requires product-manager. Only the fields you send change.
-
-` + "If a criterion broke during a refactor because it tested presentation, REWRITE it " + "against purpose rather than retiring it. Retiring removes coverage without removing risk.",
-    inputSchema: {
-      ac_key: exports_external.string(),
-      given: exports_external.string().optional(),
-      when_: exports_external.string().optional(),
-      then_: exports_external.string().optional(),
-      status: exports_external.enum(["active", "retired"]).optional()
-    },
-    annotations: { idempotentHint: true },
-    handler: async (client, args) => {
-      const { ac_key, ...payload } = args;
-      return (await client.patch(`/v1/acceptance-criteria/${seg(ac_key)}`, payload)).body;
-    }
-  }
-];
-
-// mcp/src/tools/index.ts
-var allTools = [
-  ...readTools,
-  ...writeTools,
-  ...linkTools,
-  ...evidenceTools,
-  ...workTools
-];
-var toolsByName = new Map(allTools.map((tool) => [tool.name, tool]));
-
-// mcp/src/roles.ts
-var READS = [
-  "catalog_whoami",
-  "catalog_list_products",
-  "catalog_list_capabilities",
-  "catalog_get_capability",
-  "catalog_list_features",
-  "catalog_get_feature",
-  "catalog_get_story",
-  "catalog_get_acceptance_criterion",
-  "catalog_model_health",
-  "catalog_coverage",
-  "catalog_public_catalog",
-  "catalog_list_work",
-  "catalog_get_work"
-];
-var HOLD_WORK = [
-  "catalog_claim_work",
-  "catalog_heartbeat_work",
-  "catalog_push_progress",
-  "catalog_finish_work"
-];
-var STEWARD_WORK = ["catalog_file_work", "catalog_steward_work"];
-var AUTHOR_MODEL = [
-  "catalog_create_capability",
-  "catalog_update_capability",
-  "catalog_create_feature",
-  "catalog_update_feature",
-  "catalog_create_story",
-  "catalog_update_story",
-  "catalog_create_acceptance_criterion",
-  "catalog_update_acceptance_criterion",
-  "catalog_link",
-  "catalog_unlink"
-];
-var WRITES_BY_ROLE = {
-  "product-manager": [...AUTHOR_MODEL, ...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
-  "head-of-engineering": [...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
-  engineer: [...HOLD_WORK],
-  "quality-assurance": [...HOLD_WORK, "catalog_record_evaluation"],
-  ci: [...HOLD_WORK, "catalog_record_evaluation", "catalog_record_evidence"],
-  revops: [...HOLD_WORK, "catalog_record_evidence"]
-};
-var ALL_TOOL_NAMES = new Set(allTools.map((t) => t.name));
-function toolsForRole(role) {
-  const names = new Set([...READS, ...WRITES_BY_ROLE[role]]);
-  for (const name of names) {
-    if (!ALL_TOOL_NAMES.has(name)) {
-      throw new Error(`roles.ts lists "${name}" for ${role}, but no such tool is registered`);
-    }
-  }
-  return names;
-}
-function resolveSurface(actualRole, declaredRole) {
-  if (actualRole === undefined || !ROLES.includes(actualRole)) {
-    const names = new Set(ALL_TOOL_NAMES);
-    if (declaredRole !== undefined) {
-      const narrowed = toolsForRole(declaredRole);
-      return {
-        names: new Set([...names].filter((n) => narrowed.has(n))),
-        basis: `declared role "${declaredRole}" (the catalogue's answer was unavailable)`
-      };
-    }
-    return { names, basis: "every tool (the catalogue's answer was unavailable)" };
-  }
-  const actual = toolsForRole(actualRole);
-  if (declaredRole === undefined || declaredRole === actualRole) {
-    return { names: actual, basis: `role "${actualRole}"` };
-  }
-  const declared = toolsForRole(declaredRole);
   return {
-    names: new Set([...actual].filter((n) => declared.has(n))),
-    basis: `role "${actualRole}", narrowed to what "${declaredRole}" needs`
+    productKey,
+    name: str2(body.name) ?? productKey,
+    created: body.created === true
   };
 }
 
@@ -25321,9 +24585,9 @@ class ZodObject2 extends ZodType2 {
   _getCached() {
     if (this._cached !== null)
       return this._cached;
-    const shape2 = this._def.shape();
-    const keys = util.objectKeys(shape2);
-    this._cached = { shape: shape2, keys };
+    const shape = this._def.shape();
+    const keys = util.objectKeys(shape);
+    this._cached = { shape, keys };
     return this._cached;
   }
   _parse(input) {
@@ -25338,7 +24602,7 @@ class ZodObject2 extends ZodType2 {
       return INVALID;
     }
     const { status, ctx } = this._processInputParams(input);
-    const { shape: shape2, keys: shapeKeys } = this._getCached();
+    const { shape, keys: shapeKeys } = this._getCached();
     const extraKeys = [];
     if (!(this._def.catchall instanceof ZodNever2 && this._def.unknownKeys === "strip")) {
       for (const key in ctx.data) {
@@ -25349,7 +24613,7 @@ class ZodObject2 extends ZodType2 {
     }
     const pairs = [];
     for (const key of shapeKeys) {
-      const keyValidator = shape2[key];
+      const keyValidator = shape[key];
       const value = ctx.data[key];
       pairs.push({
         key: { status: "valid", value: key },
@@ -25473,27 +24737,27 @@ class ZodObject2 extends ZodType2 {
     });
   }
   pick(mask) {
-    const shape2 = {};
+    const shape = {};
     for (const key of util.objectKeys(mask)) {
       if (mask[key] && this.shape[key]) {
-        shape2[key] = this.shape[key];
+        shape[key] = this.shape[key];
       }
     }
     return new ZodObject2({
       ...this._def,
-      shape: () => shape2
+      shape: () => shape
     });
   }
   omit(mask) {
-    const shape2 = {};
+    const shape = {};
     for (const key of util.objectKeys(this.shape)) {
       if (!mask[key]) {
-        shape2[key] = this.shape[key];
+        shape[key] = this.shape[key];
       }
     }
     return new ZodObject2({
       ...this._def,
-      shape: () => shape2
+      shape: () => shape
     });
   }
   deepPartial() {
@@ -25537,27 +24801,27 @@ class ZodObject2 extends ZodType2 {
     return createZodEnum(util.objectKeys(this.shape));
   }
 }
-ZodObject2.create = (shape2, params) => {
+ZodObject2.create = (shape, params) => {
   return new ZodObject2({
-    shape: () => shape2,
+    shape: () => shape,
     unknownKeys: "strip",
     catchall: ZodNever2.create(),
     typeName: ZodFirstPartyTypeKind2.ZodObject,
     ...processCreateParams(params)
   });
 };
-ZodObject2.strictCreate = (shape2, params) => {
+ZodObject2.strictCreate = (shape, params) => {
   return new ZodObject2({
-    shape: () => shape2,
+    shape: () => shape,
     unknownKeys: "strict",
     catchall: ZodNever2.create(),
     typeName: ZodFirstPartyTypeKind2.ZodObject,
     ...processCreateParams(params)
   });
 };
-ZodObject2.lazycreate = (shape2, params) => {
+ZodObject2.lazycreate = (shape, params) => {
   return new ZodObject2({
-    shape: shape2,
+    shape,
     unknownKeys: "strip",
     catchall: ZodNever2.create(),
     typeName: ZodFirstPartyTypeKind2.ZodObject,
@@ -26903,10 +26167,10 @@ var ZodMiniObject = /* @__PURE__ */ $constructor("ZodMiniObject", (inst, def) =>
   ZodMiniType.init(inst, def);
   defineLazy(inst, "shape", () => def.shape);
 });
-function object2(shape2, params) {
+function object2(shape, params) {
   const def = {
     type: "object",
-    shape: shape2 ?? {},
+    shape: shape ?? {},
     ...normalizeParams(params)
   };
   return new ZodMiniObject(def);
@@ -26916,16 +26180,16 @@ function isZ4Schema(s) {
   const schema = s;
   return !!schema._zod;
 }
-function objectFromShape(shape2) {
-  const values = Object.values(shape2);
+function objectFromShape(shape) {
+  const values = Object.values(shape);
   if (values.length === 0)
     return object2({});
   const allV4 = values.every(isZ4Schema);
   const allV3 = values.every((s) => !isZ4Schema(s));
   if (allV4)
-    return object2(shape2);
+    return object2(shape);
   if (allV3)
-    return objectType(shape2);
+    return objectType(shape);
   throw new Error("Mixed Zod versions detected in object shape.");
 }
 function safeParse3(schema, data) {
@@ -27949,9 +27213,9 @@ function parseObjectDef(def, refs) {
     properties: {}
   };
   const required2 = [];
-  const shape2 = def.shape();
-  for (const propName in shape2) {
-    let propDef = shape2[propName];
+  const shape = def.shape();
+  for (const propName in shape) {
+    let propDef = shape[propName];
     if (propDef === undefined || propDef._def === undefined) {
       continue;
     }
@@ -28336,8 +27600,8 @@ function toJsonSchemaCompat(schema, opts) {
   });
 }
 function getMethodLiteral(schema) {
-  const shape2 = getObjectShape(schema);
-  const methodSchema = shape2?.method;
+  const shape = getObjectShape(schema);
+  const methodSchema = shape?.method;
   if (!methodSchema) {
     throw new Error("Schema is missing a method literal");
   }
@@ -29392,8 +28656,8 @@ class Server extends Protocol {
     this._capabilities = mergeCapabilities(this._capabilities, capabilities);
   }
   setRequestHandler(requestSchema, handler) {
-    const shape2 = getObjectShape(requestSchema);
-    const methodSchema = shape2?.method;
+    const shape = getObjectShape(requestSchema);
+    const methodSchema = shape?.method;
     if (!methodSchema) {
       throw new Error("Schema is missing a method literal");
     }
@@ -29759,7 +29023,6 @@ class ExperimentalMcpServerTasks {
     return mcpServerInternal._createRegisteredTool(name, config2.title, config2.description, config2.inputSchema, config2.outputSchema, config2.annotations, execution, config2._meta, handler);
   }
 }
-
 // ../../node_modules/.bun/@modelcontextprotocol+sdk@1.30.0/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js
 class McpServer {
   constructor(serverInfo, options) {
@@ -30445,10 +29708,10 @@ function getZodSchemaObject(schema) {
   return schema;
 }
 function promptArgumentsFromSchema(schema) {
-  const shape2 = getObjectShape(schema);
-  if (!shape2)
+  const shape = getObjectShape(schema);
+  if (!shape)
     return [];
-  return Object.entries(shape2).map(([name, field]) => {
+  return Object.entries(shape).map(([name, field]) => {
     const description = getSchemaDescription(field);
     const isOptional = isSchemaOptional(field);
     return {
@@ -30459,8 +29722,8 @@ function promptArgumentsFromSchema(schema) {
   });
 }
 function getMethodValue(schema) {
-  const shape2 = getObjectShape(schema);
-  const methodSchema = shape2?.method;
+  const shape = getObjectShape(schema);
+  const methodSchema = shape?.method;
   if (!methodSchema) {
     throw new Error("Schema is missing a method literal");
   }
@@ -30485,6 +29748,886 @@ var EMPTY_COMPLETION_RESULT = {
     hasMore: false
   }
 };
+
+// mcp/src/repository.ts
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+function originRemote(cwd) {
+  try {
+    const out = execFileSync("git", ["remote", "get-url", "origin"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5000
+    });
+    const trimmed = out.trim();
+    return trimmed === "" ? undefined : trimmed;
+  } catch {
+    return;
+  }
+}
+function writeProductBinding(productPath, productKey, repo) {
+  mkdirSync(dirname(productPath), { recursive: true });
+  const body = {
+    product_key: productKey,
+    ...repo ? { repo } : {}
+  };
+  writeFileSync(productPath, `${JSON.stringify(body, null, 2)}
+`, { mode: 420 });
+}
+
+// mcp/src/bootstrap.ts
+function createBootstrapServer(options) {
+  const remote = originRemote(options.projectDir);
+  const server = new McpServer({ name: "superdev-catalog", version: "0.1.0" }, {
+    instructions: "THIS REPOSITORY IS NOT BOUND TO A PRODUCT YET, and this server holds no key " + "because of it — a key is minted for a product, and there is not one to mint " + `against.
+
+` + "This machine's grant can create it. Call catalog_bind_repository once, with the " + "product this repository is. Everything else in the catalogue stays unavailable " + "until the session is reloaded afterwards, because the servers resolve their " + `credentials at startup.
+
+` + (remote === undefined ? "This checkout reports no git remote, so the product will be created without " + "one. That works, and it means nothing stops a second machine creating a " + "SECOND product for the same code." : `The repository will be recorded as ${remote}, read from this checkout rather ` + "than from anything a caller types — so a second machine cloning it is handed " + "this same product instead of making another.")
+  });
+  server.registerTool("catalog_bind_repository", {
+    title: "Bind this repository to a product",
+    description: "Create the product this repository is, in this machine's account, and write the " + `binding at .superdev/product.json. Call this once.
+
+` + "IF A PRODUCT FOR THIS REPOSITORY ALREADY EXISTS, THIS JOINS IT. That is the " + "ordinary case for the second machine to clone a repository, and it is reported as " + "created: false rather than as a failure. The key you propose is ignored in that " + `case — the product that already holds this repository keeps its own.
+
+` + "The key is permanent. There is no tool anywhere in this system to rename or delete " + "a product, because its key scopes every capability, feature, story, and criterion " + `underneath it. Usually the repository name; agonise over the display name less.
+
+` + "AFTER THIS SUCCEEDS the session must be reloaded before any catalogue tool works: " + "this server resolved its credentials at startup and cannot re-register itself " + "mid-session. Say so plainly to the user rather than retrying.",
+    inputSchema: {
+      product_key: exports_external.string().regex(/^[a-z0-9][a-z0-9-]*$/, "lowercase kebab-case, e.g. 'reelmates'. Permanent — it scopes every row underneath it.").describe("kebab-case slug, globally unique. Permanent."),
+      name: exports_external.string().min(1).describe("Display name, e.g. 'ReelMates'.")
+    }
+  }, async (args) => {
+    try {
+      const product = await provisionProduct(options.apiUrl, options.grant, {
+        key: args.product_key,
+        name: args.name,
+        ...remote ? { repo: remote } : {}
+      });
+      writeProductBinding(options.productPath, product.productKey, remote);
+      options.note(`bound this repository to product "${product.productKey}" ` + `(${product.created ? "created" : "already existed"}); wrote ${options.productPath}`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: (product.created ? `Created product "${product.productKey}" (${product.name}).` : `This repository is already catalogued as "${product.productKey}" ` + `(${product.name}) — joined it rather than creating a second one.`) + `
+
+Wrote ${options.productPath}. COMMIT IT: the binding is a fact about ` + `the repository, not a local preference, and a colleague's checkout needs ` + `it too.
+
+` + `Reload the session for the catalogue tools to work — the servers resolve ` + `their credentials at startup, so this one is still holding none.`
+          }
+        ]
+      };
+    } catch (error51) {
+      const detail = error51 instanceof Error ? error51.message : String(error51);
+      const forbidden = error51 instanceof RegistrationError && error51.status === 403;
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Could not create the product: ${detail}` + (forbidden ? `
+
+This machine's grant exists and may not create products — that is a ` + `ceiling on the grant itself (040), so the fix is a grant minted with ` + `--may-create-products, not a change here. Only the person holding the ` + `catalogue's owner credential can issue one.` : "")
+          }
+        ],
+        isError: true
+      };
+    }
+  });
+  return server;
+}
+
+// mcp/src/tools/evidence.ts
+var evidenceTools = [
+  {
+    name: "catalog_record_evaluation",
+    title: "Record an evaluation",
+    description: `Record one evaluation of one acceptance criterion. Requires quality-assurance or ci.
+
+` + "APPEND-ONLY. There is no way to edit or delete an evaluation, and that is deliberate: " + "evaluation history must outlive the thing it evaluated. A mistaken evaluation is " + "corrected by recording a NEWER one — the model reads the most recent per criterion, so " + `the correction supersedes rather than rewrites.
+
+` + "The verdict is binary. 'Never evaluated' is the ABSENCE of a record, not a third value, " + `so do not record a placeholder for a check that did not run.
+
+` + "evaluated_at is when the check RAN, not when you are reporting it. Send the real one " + "for a run being uploaded after the fact, or the verification history is misdated.",
+    inputSchema: {
+      ac_key: exports_external.string().describe("e.g. 'ac_7bq1lm'."),
+      verdict: exports_external.enum(["pass", "fail"]),
+      method: exports_external.enum(["automated", "manual", "agent"]).describe("How it was checked. 'agent' means a model judged it."),
+      source: exports_external.string().describe("What produced this, e.g. 'ci:pytest' or a person's name."),
+      evaluated_at: exports_external.string().optional().describe("ISO 8601. Defaults to now."),
+      run_ref: exports_external.string().optional().describe("Link back to the run, e.g. a CI job URL."),
+      notes: exports_external.string().optional()
+    },
+    handler: async (client, args) => {
+      const { ac_key, ...payload } = args;
+      return (await client.post(`/v1/acceptance-criteria/${seg(ac_key)}/evaluations`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_record_evidence",
+    title: "Record an evidence window",
+    description: `Record one signal kind across a product for one window. Requires revops or ci.
+
+` + "SEND A ROW FOR EVERY ACTIVE CAPABILITY, INCLUDING THOSE MEASURING ZERO. This is the " + "one instruction that matters here, because getting it wrong fails silently: a signal " + "kind participates in capability weighting only once it has FULL coverage for the " + "window, so a batch that skips zero-activity capabilities never reaches it. The kind " + "never participates, every weight tied to it stays null, and NOTHING ERRORS — rows land " + "and the pipeline looks healthy. Call catalog_list_capabilities with status=active first " + `and send one entry per key it returns.
+
+` + "An incomplete batch is refused and names what is missing. allow_partial overrides that " + `and is rarely the right answer.
+
+` + "Full coverage is necessary, not sufficient: a window whose values are all zero is " + "excluded too, as is a kind carrying a zero coefficient in the product's weight policy. " + "Neither shows up as a model-health problem.",
+    inputSchema: {
+      product_key: exports_external.string(),
+      kind: exports_external.enum(["revenue", "active_users", "incidents", "support_tickets"]),
+      as_of: exports_external.string().describe("The window this measures, YYYY-MM-DD."),
+      source: exports_external.string().describe("What produced these numbers."),
+      signals: exports_external.array(exports_external.object({ capability_key: exports_external.string(), value: exports_external.number() })).min(1).describe("One entry per ACTIVE capability. Include zeros."),
+      allow_partial: exports_external.boolean().optional().describe("Accept a batch missing some active capabilities. Rarely correct.")
+    },
+    handler: async (client, args) => (await client.post("/v1/evidence-signals", args)).body
+  }
+];
+
+// mcp/src/tools/links.ts
+var KINDS = {
+  "capability-feature": {
+    required: ["product_key", "capability_key", "feature_key"],
+    note: "A feature SERVES a capability. Link on value served, never on dependency. " + "Optionally carries cost_score and value_score, which are per-EDGE: the same " + "feature may cost and contribute differently to each capability it serves. " + "Re-linking an existing edge is how you attach them later, and omitting them " + "leaves any already recorded untouched. Leave them unset rather than guessing " + "— an unscored edge is honest, a zero claims the feature contributes nothing."
+  },
+  "feature-story": {
+    required: ["product_key", "feature_key", "story_key"],
+    note: "A story belongs to at most one feature; a second link is refused."
+  },
+  "feature-ac": {
+    required: ["product_key", "feature_key", "ac_key"],
+    note: "A criterion belongs to at most one feature; a second link is refused."
+  },
+  "capability-dependency": {
+    required: ["product_key", "from_capability_key", "to_capability_key", "kind_of_dependency"],
+    note: "from REQUIRES or DEGRADES_WITHOUT to. Both must be in the same product."
+  },
+  "work-item-feature": {
+    required: ["work_item_key", "product_key", "feature_key"],
+    note: "A wi_* work item targets a feature."
+  },
+  "work-item-ac": {
+    required: ["work_item_key", "ac_key"],
+    note: "A wi_* work item satisfies a criterion. Refused if the work item targets features and " + "the criterion belongs to none of them — the database does not check this, so the API does."
+  }
+};
+var shape = {
+  kind: exports_external.enum(Object.keys(KINDS)).describe(Object.entries(KINDS).map(([k, v]) => `${k}: needs ${v.required.join(", ")}. ${v.note}`).join(`
+`)),
+  product_key: exports_external.string().optional(),
+  capability_key: exports_external.string().optional(),
+  feature_key: exports_external.string().optional(),
+  story_key: exports_external.string().optional(),
+  ac_key: exports_external.string().optional(),
+  from_capability_key: exports_external.string().optional(),
+  to_capability_key: exports_external.string().optional(),
+  work_item_key: exports_external.string().optional().describe("wi_ followed by six lowercase alphanumerics."),
+  cost_score: exports_external.number().min(0).optional().describe("Only for kind='capability-feature'. Per-edge, not per-feature."),
+  value_score: exports_external.number().min(0).optional().describe("Only for kind='capability-feature'. Per-edge, not per-feature."),
+  kind_of_dependency: exports_external.enum(["requires", "degrades_without"]).optional().describe("Only for kind='capability-dependency'.")
+};
+function payloadFor(args) {
+  const kind = args.kind;
+  const spec = KINDS[kind];
+  const missing = spec.required.filter((field) => args[field] === undefined);
+  if (missing.length > 0) {
+    throw new Error(`kind="${kind}" requires ${spec.required.join(", ")}; missing: ${missing.join(", ")}. ${spec.note}`);
+  }
+  switch (kind) {
+    case "capability-feature":
+      return {
+        path: "/v1/links/capability-feature",
+        payload: {
+          product_key: args.product_key,
+          capability_key: args.capability_key,
+          feature_key: args.feature_key,
+          ...args.cost_score === undefined ? {} : { cost_score: args.cost_score },
+          ...args.value_score === undefined ? {} : { value_score: args.value_score }
+        }
+      };
+    case "feature-story":
+      return {
+        path: "/v1/links/feature-story",
+        payload: {
+          product_key: args.product_key,
+          feature_key: args.feature_key,
+          story_key: args.story_key
+        }
+      };
+    case "feature-ac":
+      return {
+        path: "/v1/links/feature-ac",
+        payload: {
+          product_key: args.product_key,
+          feature_key: args.feature_key,
+          ac_key: args.ac_key
+        }
+      };
+    case "capability-dependency":
+      return {
+        path: "/v1/links/capability-dependency",
+        payload: {
+          product_key: args.product_key,
+          from_capability_key: args.from_capability_key,
+          to_capability_key: args.to_capability_key,
+          kind: args.kind_of_dependency
+        }
+      };
+    case "work-item-feature":
+      return {
+        path: "/v1/links/work-item-feature",
+        payload: {
+          work_item_key: args.work_item_key,
+          product_key: args.product_key,
+          feature_key: args.feature_key
+        }
+      };
+    case "work-item-ac":
+      return {
+        path: "/v1/links/work-item-ac",
+        payload: { work_item_key: args.work_item_key, ac_key: args.ac_key }
+      };
+  }
+}
+var linkTools = [
+  {
+    name: "catalog_link",
+    title: "Link two records",
+    description: `Create a link between two catalogue records. Requires product-manager.
+
+` + "Which fields are required depends on `kind` — see its description. Stories and " + "acceptance criteria are SIBLINGS under a feature, not parent and child: each links to " + "the feature independently, and there is no story-to-criterion link.",
+    inputSchema: shape,
+    handler: async (client, args) => {
+      const { path, payload } = payloadFor(args);
+      return (await client.post(path, payload)).body;
+    }
+  },
+  {
+    name: "catalog_unlink",
+    title: "Remove a link",
+    description: `Remove a link. Requires product-manager.
+
+` + "Unlinking is not deletion — a feature legitimately stops serving a capability, and " + "nothing in this model is ever hard-deleted. Note that removing a feature's LAST " + "capability is refused: the database does not hold an orphaned feature even briefly. " + "To retire a record, set its lifecycle field instead.",
+    inputSchema: shape,
+    annotations: { destructiveHint: true, idempotentHint: true },
+    handler: async (client, args) => {
+      const { path, payload } = payloadFor(args);
+      return (await client.delete(path, payload)).body;
+    }
+  }
+];
+
+// mcp/src/tools/reads.ts
+var productKey = exports_external.string().describe("Product slug, e.g. 'trenchcoat'.");
+var readTools = [
+  {
+    name: "catalog_whoami",
+    title: "Who is this key",
+    description: "Report which Postgres role and pando_role this API key carries, and what the " + "database sees for the connection a request runs on. Call this first when a write " + "is unexpectedly refused: the answer says which role you actually hold.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+    handler: async (client) => (await client.get("/v1/whoami")).body
+  },
+  {
+    name: "catalog_list_products",
+    title: "List products",
+    description: "List every product in the catalogue.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+    handler: async (client) => (await client.get("/v1/products")).body
+  },
+  {
+    name: "catalog_list_capabilities",
+    title: "List capabilities",
+    description: "List a product's capabilities. The capability set is the denominator for every " + "weight and coverage figure the model reports, so this is the partition, not a tag list.",
+    inputSchema: {
+      product_key: productKey,
+      status: exports_external.enum(["proposed", "active", "deprecated", "archived"]).optional().describe("Filter by lifecycle status. Omit for all.")
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => {
+      const query = args.status ? `?status=${seg(args.status)}` : "";
+      return (await client.get(`/v1/products/${seg(args.product_key)}/capabilities${query}`)).body;
+    }
+  },
+  {
+    name: "catalog_get_capability",
+    title: "Get a capability",
+    description: "One capability with the features that serve it and its computed weight. " + "A null weight means 'not yet measurable', not 'worth nothing'.",
+    inputSchema: {
+      product_key: productKey,
+      capability_key: exports_external.string().describe("Capability slug. Unique per product, not globally.")
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/capabilities/${seg(args.capability_key)}`)).body
+  },
+  {
+    name: "catalog_list_features",
+    title: "List features",
+    description: "List a product's features. Only 'active' features count toward verification and " + "coverage, so lifecycle_state is worth reading rather than skimming.",
+    inputSchema: {
+      product_key: productKey,
+      lifecycle_state: exports_external.enum(["proposed", "active", "deprecated", "removed"]).optional().describe("Filter by lifecycle state. Omit for all.")
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => {
+      const query = args.lifecycle_state ? `?lifecycle_state=${seg(args.lifecycle_state)}` : "";
+      return (await client.get(`/v1/products/${seg(args.product_key)}/features${query}`)).body;
+    }
+  },
+  {
+    name: "catalog_get_feature",
+    title: "Get a feature",
+    description: "One feature with its stories, acceptance criteria, and verified state. Stories and " + "criteria are SIBLINGS under a feature, not parent and child — neither links through " + "the other.",
+    inputSchema: {
+      product_key: productKey,
+      feature_key: exports_external.string().describe("Feature slug. Unique per product, not globally.")
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/features/${seg(args.feature_key)}`)).body
+  },
+  {
+    name: "catalog_get_story",
+    title: "Get a user story",
+    description: "One user story with its derived confidence. Confidence decays from last_reviewed_at, " + "so an accurate story that looks stale is as misleading as the reverse. " + "Story keys are GLOBAL — no product is needed to address one.",
+    inputSchema: { story_key: exports_external.string().describe("e.g. 'story_9f3k2a'.") },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/stories/${seg(args.story_key)}`)).body
+  },
+  {
+    name: "catalog_get_acceptance_criterion",
+    title: "Get an acceptance criterion",
+    description: "One acceptance criterion with its latest evaluation. 'Never evaluated' is the ABSENCE " + "of an evaluation, not a third verdict. Criterion keys are GLOBAL.",
+    inputSchema: { ac_key: exports_external.string().describe("e.g. 'ac_7bq1lm'.") },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/acceptance-criteria/${seg(args.ac_key)}`)).body
+  },
+  {
+    name: "catalog_model_health",
+    title: "Model health",
+    description: "Problems the model can detect in itself for one product — orphaned features, " + "partially populated signal kinds, overdue coverage reviews. The first thing to check " + "when a figure looks wrong.",
+    inputSchema: { product_key: productKey },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/model-health`)).body
+  },
+  {
+    name: "catalog_coverage",
+    title: "Coverage",
+    description: "A product's weighted verified share, and how many of its capabilities carry no weight. " + "A high unweighted count makes the share unrepresentative.",
+    inputSchema: { product_key: productKey },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/coverage`)).body
+  },
+  {
+    name: "catalog_public_catalog",
+    title: "Public catalogue",
+    description: "The GTM projection: public capabilities with their public feature counts. This is the " + "view intended to reach customers, so its contents are a claim you are making publicly.",
+    inputSchema: { product_key: productKey },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/catalog`)).body
+  }
+];
+
+// mcp/src/tools/work.ts
+var agentIdField = exports_external.string().min(1).max(64).optional().describe("Who is acting, if not this server's configured identity. Pass a distinct id " + "when several agents share one session — otherwise they are the same agent to " + "the catalogue and can release or finish each other's work by accident. It " + "changes WHO holds a claim, never WHAT this key is allowed to do.");
+var productKey2 = exports_external.string().describe("Product slug, from .superdev/product.json.");
+var workItemKey = exports_external.string().regex(/^wi_[a-z0-9]{6}$/, "wi_ followed by exactly six lowercase alphanumerics").describe("Work item key, e.g. wi_a1b2c3.");
+var workTools = [
+  {
+    name: "catalog_claim_work",
+    title: "Claim the next work item",
+    description: "Take the next piece of work addressed to THIS KEY'S ROLE in the given product, " + `and get the whole brief back in the same answer.
+
+` + "This is the first call of an autonomous run. What comes back is everything " + "needed to start without asking anyone: `intent` (why this work exists now), " + "`guidance` (how the author wants it done), `features` (each with the " + "capabilities it serves and the user stories that explain who it is for), " + "`must_satisfy` (the acceptance criteria this item is judged against), " + "`definition_of_done`, and `notes` (what previous agents said).\n\n" + `THREE THINGS TO KNOW BEFORE YOU LOOP ON THIS:
+
+` + "1. `claimed: null` IS SUCCESS. It means this role's queue is empty right now — " + "not that the product has no work, and not that anything failed. Stop and report " + `that; do not retry in a tight loop and do not go looking for work elsewhere.
+
+` + "2. WORK IS ADDRESSED TO A ROLE, and the role is your key's — you cannot ask for " + "another role's queue. An engineer will never be handed a quality-assurance item " + "even if it is the highest priority thing in the product. That is the design, not " + `a misconfiguration.
+
+` + "3. THE CLAIM IS A LEASE, not an assignment. It expires. Call " + "`catalog_heartbeat_work` while you work, and treat a lost lease as a full stop: " + "another agent may already have taken the item.",
+    inputSchema: {
+      product_key: productKey2,
+      lease_seconds: exports_external.number().int().min(30).max(86400).optional().describe("How long you are claiming it for, default 900. Ask for roughly how long " + "you expect the work to take and heartbeat rather than asking for hours: a " + "long lease on an agent that dies keeps the item out of the queue for that " + "whole time."),
+      work_item_key: workItemKey.optional().describe("Claim this specific item instead of the next one. A FILTER, never an " + "override — the same role, state, lease, and dependency rules still apply, " + "so naming an item you may not have returns claimed: null."),
+      agent_id: agentIdField
+    },
+    handler: async (client, args) => {
+      const { agent_id, ...payload } = args;
+      return (await client.post("/v1/work-items/claim", payload, agent_id)).body;
+    }
+  },
+  {
+    name: "catalog_list_work",
+    title: "List the work queue",
+    description: "See the queue without taking anything from it. Read-only, and it shows EVERY " + "role's work, not just yours — useful for reporting on what is outstanding and " + `for seeing what is blocked on whom.
+
+` + "`ready` is the field that matters: it is true when an item would actually be " + "handed out by a claim right now (open or lapsed, and its dependency finished). " + `An item that is not ready is not yours to start, whatever its priority says.
+
+` + "Ordering is priority ascending — SMALLER IS SOONER — then oldest first, which " + "is the same order a claim uses.",
+    inputSchema: {
+      product_key: productKey2,
+      role_required: exports_external.string().optional().describe("Filter to one role's queue, e.g. 'engineer'. Omit for all roles."),
+      state: exports_external.enum(["open", "claimed", "blocked", "done", "cancelled"]).optional().describe("Filter by state. Omit for all."),
+      ready: exports_external.boolean().optional().describe("True to show only items a claim would actually hand out now."),
+      limit: exports_external.number().int().min(1).max(500).optional().describe("Default 100.")
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => {
+      const query = new URLSearchParams;
+      if (args.role_required)
+        query.set("role_required", args.role_required);
+      if (args.state)
+        query.set("state", args.state);
+      if (args.ready === true)
+        query.set("ready", "true");
+      if (args.limit)
+        query.set("limit", String(args.limit));
+      const qs = query.toString();
+      return (await client.get(`/v1/products/${seg(args.product_key)}/work-items${qs ? `?${qs}` : ""}`)).body;
+    }
+  },
+  {
+    name: "catalog_get_work",
+    title: "Read a work item's brief",
+    description: "The full brief for one work item — the same payload a claim returns, without " + "claiming anything. Use it to re-read your instructions mid-task, to check " + "whether an item you were about to start is still held by someone, or to read " + "the notes another agent left before you picked up its handoff.",
+    inputSchema: { work_item_key: workItemKey },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => (await client.get(`/v1/work-items/${seg(args.work_item_key)}`)).body
+  },
+  {
+    name: "catalog_heartbeat_work",
+    title: "Extend your lease",
+    description: "Tell the catalogue you are still working on an item you hold, pushing its lease " + `out.
+
+` + "Call this whenever a step finishes and before anything long. A lapsed lease " + "returns the item to the queue, and another agent taking it is how the same work " + `gets done twice.
+
+` + "A 409 `lease_lost` means YOU NO LONGER HOLD THIS. Do not retry it and do not " + "keep working: stop, discard anything uncommitted that assumed you owned the " + "item, and claim again. The three causes — lapsed, taken by another agent, no " + "such item — are reported identically because there is nothing you would do " + "differently between them.",
+    inputSchema: {
+      work_item_key: workItemKey,
+      lease_seconds: exports_external.number().int().min(30).max(86400).optional().describe("Default 900."),
+      agent_id: agentIdField
+    },
+    handler: async (client, args) => {
+      const { work_item_key, agent_id, ...payload } = args;
+      return (await client.post(`/v1/work-items/${seg(work_item_key)}/heartbeat`, payload, agent_id)).body;
+    }
+  },
+  {
+    name: "catalog_push_progress",
+    title: "Push a progress note",
+    description: "Append a note to a work item you are holding. Notes are permanent and cannot be " + "edited — a note is what you observed at a moment, and one that could be revised " + `afterwards would be evidence of nothing.
+
+` + `Choose the kind honestly, because they are read for different reasons:
+` + `  progress — what is now done. The thing a human checking on a long run wants.
+` + `  decision — a choice you made and WHY you made it. The most valuable kind by a
+` + `             wide margin: it is the only record of why the code looks like this,
+` + `             and the next agent has no other way to recover it.
+` + `  blocker  — what stopped you. Write this BEFORE moving the item to blocked.
+` + `  handoff  — what the next agent needs to know. Write it before you release.
+
+` + "Write few and write them worth reading. A note per file touched is noise; a note " + "recording why you rejected the obvious approach is the reason this table exists.",
+    inputSchema: {
+      work_item_key: workItemKey,
+      kind: exports_external.enum(["progress", "decision", "blocker", "handoff"]),
+      body: exports_external.string().min(1).describe("What happened, in prose. Complete sentences."),
+      agent_id: agentIdField
+    },
+    handler: async (client, args) => {
+      const { work_item_key, agent_id, ...payload } = args;
+      return (await client.post(`/v1/work-items/${seg(work_item_key)}/notes`, payload, agent_id)).body;
+    }
+  },
+  {
+    name: "catalog_finish_work",
+    title: "Finish, block, or release a work item",
+    description: "Move an item you hold out of `claimed`, and say what happened. The outcome is " + "required for everything except a release, and it is read by whoever picks up " + `what you left.
+
+` + `  done      — the work is complete. TERMINAL: nothing reopens it, ever. Only use
+` + "              it when every criterion in `must_satisfy` is actually observable,\n" + `              not when the code merely exists.
+` + "  blocked   — you stopped and it needs someone else. Push a `blocker` note first\n" + `              with the detail; the outcome here is the one-line version.
+` + `  open      — you are giving it back untouched. Honest and cheap; an item you
+` + `              cannot do is better released than held under a lease nobody is
+` + "              working. Push a `handoff` note first if you learned anything.\n" + `  cancelled — the work should not be done at all. TERMINAL. This is a planning
+` + `              judgement; if you are the one building it, prefer blocked and say
+` + `              why, and let the planner decide.
+
+` + "RECORDING A VERDICT IS A DIFFERENT ACT. Finishing a work item says you did the " + "work; it does not say the criteria pass. That is `catalog_record_evaluation`, " + "and deliberately not yours if your role cannot call it.",
+    inputSchema: {
+      work_item_key: workItemKey,
+      state: exports_external.enum(["done", "blocked", "open", "cancelled"]),
+      outcome: exports_external.string().min(1).optional().describe("What happened, in one or two sentences. Required for done, blocked, and " + "cancelled. Write it for someone who was not here."),
+      agent_id: agentIdField
+    },
+    handler: async (client, args) => {
+      const { work_item_key, agent_id, ...payload } = args;
+      return (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload, agent_id)).body;
+    }
+  },
+  {
+    name: "catalog_file_work",
+    title: "File a work item",
+    description: "Put a piece of work on the queue for a role to pick up. Requires product-manager " + "or head-of-engineering — an agent that could file its own work would have a " + `to-do list rather than a backlog.
+
+` + "THE QUALITY BAR, WHICH THE DATABASE CANNOT ENFORCE. A work item whose intent " + "reads 'improve things' satisfies every constraint in the schema and is worthless " + `to the agent that claims it. What you write here IS the briefing:
+
+` + `  title    — one line, what will be true when this is done. Not a topic.
+` + `  intent   — why this work exists NOW. The catalogue already says what the
+` + `             feature is; this says why it is worth an agent's turn today. A
+` + `             criterion with no implementation, a verdict that came back failing,
+` + `             a capability whose weight moved. Name the thing that changed.
+` + `  guidance — how you want it done, where it differs from the obvious. Leave it
+` + `             out if there is nothing to say; empty guidance is better than
+` + `             restating the intent.
+
+` + "Then LINK IT. `catalog_link` with kind='work-item-feature' and " + "kind='work-item-ac' is what puts the stories and the acceptance criteria into " + "the brief. An unlinked work item hands the agent a sentence and no criteria, " + `which is the failure this whole model exists to prevent.
+
+` + "Address it to the role that does the work, not the role that wants it: building " + "is 'engineer', verifying is 'quality-assurance', planning is 'product-manager'.",
+    inputSchema: {
+      product_key: productKey2,
+      key: workItemKey.describe("wi_ plus six lowercase alphanumerics you choose, e.g. wi_7bq1lm. Must be unique."),
+      title: exports_external.string().min(1),
+      intent: exports_external.string().min(1),
+      guidance: exports_external.string().min(1).optional(),
+      role_required: exports_external.enum([
+        "product-manager",
+        "quality-assurance",
+        "engineer",
+        "ci",
+        "revops",
+        "head-of-engineering"
+      ]).describe("Which role may claim this."),
+      priority: exports_external.number().int().min(0).max(1000).optional().describe("SMALLER IS SOONER. Default 100, leaving room on both sides."),
+      depends_on_key: workItemKey.optional().describe("Another work item that must be `done` before this one is handed out. Use it " + "for genuine ordering, not for grouping — a dependency on something nobody " + "is doing makes this item invisible.")
+    },
+    handler: async (client, args) => {
+      const { product_key, ...payload } = args;
+      return (await client.post(`/v1/products/${seg(product_key)}/work-items`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_steward_work",
+    title: "Reprioritise or reword a work item",
+    description: "Change a work item's wording or its place in the queue without touching its " + `state. Requires product-manager or head-of-engineering.
+
+` + "What cannot be changed, by design: the role it is addressed to, and its product. " + "Both would re-address work an agent may be holding mid-flight. Cancel and re-file " + "instead.",
+    inputSchema: {
+      work_item_key: workItemKey,
+      title: exports_external.string().min(1).optional(),
+      intent: exports_external.string().min(1).optional(),
+      guidance: exports_external.string().min(1).optional(),
+      priority: exports_external.number().int().min(0).max(1000).optional().describe("Smaller is sooner.")
+    },
+    handler: async (client, args) => {
+      const { work_item_key, ...payload } = args;
+      return (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload)).body;
+    }
+  }
+];
+
+// mcp/src/tools/writes.ts
+var productKey3 = exports_external.string().describe("Product slug, e.g. 'trenchcoat'.");
+var valueProp = exports_external.object({
+  new_revenue: exports_external.array(exports_external.string()),
+  revenue_growth: exports_external.array(exports_external.string()),
+  cost_reduction: exports_external.array(exports_external.string())
+}).describe("All three headings are required, each an array (021 rejects a missing heading).");
+var costAssessment = exports_external.object({
+  cost: exports_external.array(exports_external.string()),
+  risk: exports_external.array(exports_external.string()),
+  uncertainty: exports_external.array(exports_external.string())
+}).describe("All three headings are required, each an array.");
+var featureScopeBoundary = exports_external.object({ in_scope: exports_external.array(exports_external.string()), out_of_scope: exports_external.array(exports_external.string()) }).describe("Both headings are required, each an array.");
+var writeTools = [
+  {
+    name: "catalog_create_product",
+    title: "Create a product",
+    description: "Create a product — the root of a catalogue, and the partition every capability, " + "feature, story, and criterion is scoped by. Requires product-manager or " + `head-of-engineering (026).
+
+` + "THIS IS A ONCE-PER-REPOSITORY OPERATION. There is deliberately no tool to rename or " + "delete a product, because the key scopes every other row in the catalogue: getting it " + "wrong is not something a later call can undo. Call catalog_list_products first and " + `confirm the product does not already exist under another name.
+
+` + "A second product for a repository that already has one silently SPLITS its catalogue — " + "nothing in the schema prevents it and nothing downstream will notice, because every " + `query scopes by product_id and will simply return the half it was pointed at.
+
+` + "The key is the durable identifier and belongs in .superdev/product.json; the name is " + "display text and is the only part worth agonising over less.",
+    inputSchema: {
+      key: exports_external.string().describe("kebab-case slug, globally unique, e.g. 'trenchcoat'. Permanent."),
+      name: exports_external.string().describe("Display name, e.g. 'Trenchcoat'.")
+    },
+    handler: async (client, args) => (await client.post("/v1/products", args)).body
+  },
+  {
+    name: "catalog_create_capability",
+    title: "Create a capability",
+    description: `Add a capability to a product. Requires product-manager.
+
+` + "A capability is a VALUE PROPOSITION, not a component — if you have named a component " + "you have written a Feature. Before calling this, check all four bars: a customer would " + "recognise it as something they get; two people given only the boundaries would assign " + "the same features to the same capabilities; every 'Out:' clause names a SIBLING " + "capability rather than a date or a roadmap ('at this time', 'currently', 'not yet' are " + `the tell); and no sibling's scope_boundary is made inaccurate by adding this one.
+
+` + "Adding a capability re-derives every sibling's weight share, so this is the most " + "expensive record in the model to get wrong.",
+    inputSchema: {
+      product_key: productKey3,
+      key: exports_external.string().describe("kebab-case slug, e.g. 'telemetry-capture'."),
+      name: exports_external.string(),
+      description: exports_external.string().describe("What this is, in the customer's terms."),
+      scope_boundary: exports_external.string().describe("'In: ... Out: ...' — every Out clause naming a neighbouring capability."),
+      status: exports_external.enum(["proposed", "active", "deprecated", "archived"]).optional(),
+      visibility: exports_external.enum(["internal", "public"]).optional(),
+      vbo: exports_external.number().min(0).max(100).optional()
+    },
+    handler: async (client, args) => {
+      const { product_key, ...payload } = args;
+      return (await client.post(`/v1/products/${seg(product_key)}/capabilities`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_update_capability",
+    title: "Update a capability",
+    description: `Revise a capability. Requires product-manager. Only the fields you send change.
+
+` + "Re-read every sibling's scope_boundary after changing one and confirm each is still " + "true — that is the step that gets skipped, and it is how a partition rots.",
+    inputSchema: {
+      product_key: productKey3,
+      capability_key: exports_external.string(),
+      name: exports_external.string().optional(),
+      description: exports_external.string().optional(),
+      scope_boundary: exports_external.string().optional(),
+      status: exports_external.enum(["proposed", "active", "deprecated", "archived"]).optional(),
+      visibility: exports_external.enum(["internal", "public"]).optional(),
+      vbo: exports_external.number().min(0).max(100).optional()
+    },
+    annotations: { idempotentHint: true },
+    handler: async (client, args) => {
+      const { product_key, capability_key, ...payload } = args;
+      return (await client.patch(`/v1/products/${seg(product_key)}/capabilities/${seg(capability_key)}`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_create_feature",
+    title: "Create a feature",
+    description: "Add a feature and link it to at least one capability, in one transaction. " + `Requires product-manager.
+
+` + "capability_keys is REQUIRED and must be non-empty: the database rejects a feature that " + `reaches commit unlinked, so there is no way to create one first and link it later.
+
+` + "Link on VALUE SERVED, not on dependency. A public API that authenticates with API keys " + "does not thereby serve team-administration — it depends on it. Every spurious link " + `widens blast-radius traversal until everything touches everything.
+
+` + "lifecycle_state must be honest: 'proposed' until it actually ships. Only 'active' " + "features count toward verification, so an optimistic 'active' reports as unverified " + "product and drags coverage down.",
+    inputSchema: {
+      product_key: productKey3,
+      key: exports_external.string().describe("kebab-case slug."),
+      name: exports_external.string(),
+      description: exports_external.string(),
+      capability_keys: exports_external.array(exports_external.string()).min(1).describe("Capabilities whose value this feature delivers. At least one."),
+      lifecycle_state: exports_external.enum(["proposed", "active", "deprecated", "removed"]).optional(),
+      visibility: exports_external.enum(["internal", "public"]).optional(),
+      value_prop: valueProp.optional(),
+      cost_assessment: costAssessment.optional(),
+      scope_boundary: featureScopeBoundary.optional()
+    },
+    handler: async (client, args) => {
+      const { product_key, ...payload } = args;
+      return (await client.post(`/v1/products/${seg(product_key)}/features`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_update_feature",
+    title: "Update a feature",
+    description: `Revise a feature. Requires product-manager. Only the fields you send change.
+
+` + "lifecycle_state is the field with consequences. Only 'active' features count toward " + "verification and coverage, so promoting one to 'active' before it ships reports as " + "unverified product and drags the coverage figure down until it is either built or " + "demoted — and the number it drags down is the one anyone reads to decide what to build " + `next.
+
+` + "value_prop, cost_assessment, and scope_boundary are WHOLE-OBJECT replacements, not " + "merges. Sending scope_boundary with only in_scope discards out_of_scope; read the " + `current value first and send it back complete.
+
+` + "To retire a feature, move lifecycle_state to 'deprecated' or 'removed'. There is no " + "delete, here or in the database: verification history has to outlive the thing it " + "evaluated.",
+    inputSchema: {
+      product_key: productKey3,
+      feature_key: exports_external.string(),
+      name: exports_external.string().optional(),
+      description: exports_external.string().optional(),
+      lifecycle_state: exports_external.enum(["proposed", "active", "deprecated", "removed"]).optional(),
+      visibility: exports_external.enum(["internal", "public"]).optional(),
+      value_prop: valueProp.optional(),
+      cost_assessment: costAssessment.optional(),
+      scope_boundary: featureScopeBoundary.optional()
+    },
+    annotations: { idempotentHint: true },
+    handler: async (client, args) => {
+      const { product_key, feature_key, ...payload } = args;
+      return (await client.patch(`/v1/products/${seg(product_key)}/features/${seg(feature_key)}`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_create_story",
+    title: "Create a user story",
+    description: "Add a user story, optionally linked to a feature in the same transaction. " + `Requires product-manager.
+
+` + "The `want` must survive a redesign — it is the user's desire, not the screen. " + "'to see each session's cost broken down by component type' IS the feature and goes " + "stale on a redesign; 'to know which parts of a session are responsible for its cost' " + `does not.
+
+` + "The `benefit` must be a RESULT, not the want restated. 'so that I can see the " + `dashboard' restates; 'so that I can tell which components drive cost' is a result.
+
+` + "A story is never 'done', only accurate or stale. Delivery lives in wi_* work items.",
+    inputSchema: {
+      key: exports_external.string().describe("story_ followed by six lowercase alphanumerics."),
+      product_key: productKey3,
+      role: exports_external.string().describe("Who wants this, e.g. 'engineer investigating a costly session'."),
+      want: exports_external.string(),
+      benefit: exports_external.string(),
+      status: exports_external.enum(["current", "stale", "retired"]).optional(),
+      last_reviewed_at: exports_external.string().optional().describe("ISO 8601. Confidence decays from here — set it when you revise."),
+      importance: exports_external.number().min(0).optional(),
+      feature_key: exports_external.string().optional().describe("Link to this feature in the same transaction.")
+    },
+    handler: async (client, args) => (await client.post("/v1/stories", args)).body
+  },
+  {
+    name: "catalog_update_story",
+    title: "Update a user story",
+    description: `Revise a story. Requires product-manager. Only the fields you send change.
+
+` + "Set last_reviewed_at when you revise. Leaving it untouched is the most common mistake " + "here: confidence decays from that timestamp, and an accurate story that looks stale is " + "as misleading as the reverse.",
+    inputSchema: {
+      story_key: exports_external.string(),
+      role: exports_external.string().optional(),
+      want: exports_external.string().optional(),
+      benefit: exports_external.string().optional(),
+      status: exports_external.enum(["current", "stale", "retired"]).optional(),
+      last_reviewed_at: exports_external.string().optional().describe("ISO 8601."),
+      importance: exports_external.number().min(0).optional()
+    },
+    annotations: { idempotentHint: true },
+    handler: async (client, args) => {
+      const { story_key, ...payload } = args;
+      return (await client.patch(`/v1/stories/${seg(story_key)}`, payload)).body;
+    }
+  },
+  {
+    name: "catalog_create_acceptance_criterion",
+    title: "Create an acceptance criterion",
+    description: "Add an acceptance criterion, optionally linked to a feature in the same transaction. " + `Requires product-manager.
+
+` + "Four bars, and the second is the one authors skip: NAME THE BUG THIS WOULD CATCH, then " + "check the `given` actually reaches it. A criterion only discriminates if the correct " + "and the broken implementation produce DIFFERENT results under the setup you wrote. Most " + "unfalsifiable criteria have a fine `then` and a `given` describing a case where both " + `behaviours look identical.
+
+` + "It must also be checkable by someone else without asking what you meant, verify purpose " + "rather than presentation (criteria bound to the current UI shatter on the next refactor " + "and get retired, quietly eroding coverage), and be binary — no 'works well' or " + `'fast enough'.
+
+` + "Bars 2 and 3 pull against each other. Moving a criterion off presentation usually leaves " + "the `then` intact and quietly stops the `given` from discriminating; the repair is in " + "the `given`, not the `then`.",
+    inputSchema: {
+      key: exports_external.string().describe("ac_ followed by six lowercase alphanumerics."),
+      product_key: productKey3,
+      given: exports_external.string().describe("The setup. This is where falsifiability is usually lost."),
+      when_: exports_external.string().describe("Trailing underscore: 'when' is a reserved word."),
+      then_: exports_external.string().describe("The assertion. Trailing underscore: 'then' is reserved."),
+      status: exports_external.enum(["active", "retired"]).optional(),
+      feature_key: exports_external.string().optional().describe("Link to this feature in the same transaction.")
+    },
+    handler: async (client, args) => (await client.post("/v1/acceptance-criteria", args)).body
+  },
+  {
+    name: "catalog_update_acceptance_criterion",
+    title: "Update an acceptance criterion",
+    description: `Revise a criterion. Requires product-manager. Only the fields you send change.
+
+` + "If a criterion broke during a refactor because it tested presentation, REWRITE it " + "against purpose rather than retiring it. Retiring removes coverage without removing risk.",
+    inputSchema: {
+      ac_key: exports_external.string(),
+      given: exports_external.string().optional(),
+      when_: exports_external.string().optional(),
+      then_: exports_external.string().optional(),
+      status: exports_external.enum(["active", "retired"]).optional()
+    },
+    annotations: { idempotentHint: true },
+    handler: async (client, args) => {
+      const { ac_key, ...payload } = args;
+      return (await client.patch(`/v1/acceptance-criteria/${seg(ac_key)}`, payload)).body;
+    }
+  }
+];
+
+// mcp/src/tools/index.ts
+var allTools = [
+  ...readTools,
+  ...writeTools,
+  ...linkTools,
+  ...evidenceTools,
+  ...workTools
+];
+var toolsByName = new Map(allTools.map((tool) => [tool.name, tool]));
+
+// mcp/src/roles.ts
+var READS = [
+  "catalog_whoami",
+  "catalog_list_products",
+  "catalog_list_capabilities",
+  "catalog_get_capability",
+  "catalog_list_features",
+  "catalog_get_feature",
+  "catalog_get_story",
+  "catalog_get_acceptance_criterion",
+  "catalog_model_health",
+  "catalog_coverage",
+  "catalog_public_catalog",
+  "catalog_list_work",
+  "catalog_get_work"
+];
+var HOLD_WORK = [
+  "catalog_claim_work",
+  "catalog_heartbeat_work",
+  "catalog_push_progress",
+  "catalog_finish_work"
+];
+var STEWARD_WORK = ["catalog_file_work", "catalog_steward_work"];
+var AUTHOR_MODEL = [
+  "catalog_create_capability",
+  "catalog_update_capability",
+  "catalog_create_feature",
+  "catalog_update_feature",
+  "catalog_create_story",
+  "catalog_update_story",
+  "catalog_create_acceptance_criterion",
+  "catalog_update_acceptance_criterion",
+  "catalog_link",
+  "catalog_unlink"
+];
+var WRITES_BY_ROLE = {
+  "product-manager": [...AUTHOR_MODEL, ...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
+  "head-of-engineering": [...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
+  engineer: [...HOLD_WORK],
+  "quality-assurance": [...HOLD_WORK, "catalog_record_evaluation"],
+  ci: [...HOLD_WORK, "catalog_record_evaluation", "catalog_record_evidence"],
+  revops: [...HOLD_WORK, "catalog_record_evidence"]
+};
+var ALL_TOOL_NAMES = new Set(allTools.map((t) => t.name));
+function toolsForRole(role) {
+  const names = new Set([...READS, ...WRITES_BY_ROLE[role]]);
+  for (const name of names) {
+    if (!ALL_TOOL_NAMES.has(name)) {
+      throw new Error(`roles.ts lists "${name}" for ${role}, but no such tool is registered`);
+    }
+  }
+  return names;
+}
+function resolveSurface(actualRole, declaredRole) {
+  if (actualRole === undefined || !ROLES.includes(actualRole)) {
+    const names = new Set(ALL_TOOL_NAMES);
+    if (declaredRole !== undefined) {
+      const narrowed = toolsForRole(declaredRole);
+      return {
+        names: new Set([...names].filter((n) => narrowed.has(n))),
+        basis: `declared role "${declaredRole}" (the catalogue's answer was unavailable)`
+      };
+    }
+    return { names, basis: "every tool (the catalogue's answer was unavailable)" };
+  }
+  const actual = toolsForRole(actualRole);
+  if (declaredRole === undefined || declaredRole === actualRole) {
+    return { names: actual, basis: `role "${actualRole}"` };
+  }
+  const declared = toolsForRole(declaredRole);
+  return {
+    names: new Set([...actual].filter((n) => declared.has(n))),
+    basis: `role "${actualRole}", narrowed to what "${declaredRole}" needs`
+  };
+}
 // schemas/acceptance-criterion.schema.json
 var acceptance_criterion_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -31136,11 +31279,29 @@ A key IS configured here, but not one belonging to the ` + `"${pinned}" role, so
   note(`no orchestrator grant found; using the configured keys.${pinned} instead. ` + "Each agent shares this one credential and therefore one identity — mint a grant " + "to give them their own.");
   await startConfigured(loaded);
 }
+async function startBootstrap(missing) {
+  note(missing.message.split(`
+`)[0]);
+  note("this machine's grant may be able to create it — offering catalog_bind_repository " + "and nothing else, because this server holds no key until a product exists.");
+  const server = createBootstrapServer({
+    apiUrl: missing.apiUrl,
+    grant: missing.grant,
+    productPath: missing.productPath,
+    projectDir: ENV.CLAUDE_PROJECT_DIR?.trim() || process.cwd(),
+    note
+  });
+  await server.connect(new StdioServerTransport);
+  note("1 tool offered: catalog_bind_repository");
+}
 async function startPinned(pinned) {
   let grant;
   try {
     grant = loadGrant(pinned);
   } catch (error51) {
+    if (error51 instanceof ProductBindingMissingError && pinned === "product-manager") {
+      await startBootstrap(error51);
+      return;
+    }
     if (!(error51 instanceof ConfigError))
       throw error51;
     await startPinnedFromConfiguredKey(pinned, error51);

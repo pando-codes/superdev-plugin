@@ -83,6 +83,36 @@ export interface GrantLoad {
   readonly warnings: readonly string[];
 }
 
+/**
+ * 040. A live grant, and a repository that is not bound to a product yet.
+ *
+ * WHY THIS IS A DISTINCT ERROR AND WHY IT CARRIES A CREDENTIAL
+ *
+ * Because it is the one failure here that the session can DO something about.
+ * Every other way loadGrant fails needs a person: a missing grant, an expired
+ * one, a catalogue that cannot be reached. This one needs a product, and 040
+ * gave the grant the authority to create one — so the caller that catches this
+ * is expected to act on it rather than only report it, and it needs the api_url
+ * and grant that were already resolved on the way here to do so.
+ *
+ * It stays an ERROR rather than becoming a variant of GrantLoad because every
+ * existing caller must keep treating it as a full stop. A pinned engineer or
+ * quality-assurance server has no business creating products, and the way it
+ * keeps having no business doing so is that nothing but the bootstrap path ever
+ * looks inside this.
+ */
+export class ProductBindingMissingError extends ConfigError {
+  constructor(
+    message: string,
+    readonly apiUrl: string,
+    readonly grant: string,
+    readonly agentId: string,
+    readonly productPath: string,
+  ) {
+    super(message);
+  }
+}
+
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 
@@ -225,13 +255,17 @@ export function loadGrant(
   const productFile = readJsonObject(productPath);
   const productKey = str(env.SUPERDEV_PRODUCT) ?? str(productFile?.raw.product_key);
   if (!productKey) {
-    throw new ConfigError(
+    throw new ProductBindingMissingError(
       `this repository is not bound to a product, so there is nothing to register an ` +
         `agent against.\n\n` +
         `  ${productPath}\n` +
         `  { "product_key": "<the product this repository is>" }\n\n` +
         `superdev:init writes this file. Do not guess it from the directory name — a key ` +
         `bound to the wrong product writes nothing and says little about why.`,
+      apiUrl,
+      grant,
+      defaultAgentId(env, pinnedRole),
+      productPath,
     );
   }
   if (productFile) sources.push(productPath);
@@ -361,5 +395,83 @@ export async function registerAgent(
     pandoRole: str(body.pando_role) ?? config.pinnedRole,
     agentId: str(body.agent_id) ?? config.agentId,
     expiresAt: str(body.expires_at) ?? "",
+  };
+}
+
+/**
+ * 040. Creates the product this repository is, or joins the one that already
+ * holds it.
+ *
+ * WHY THE ANSWER CARRIES `created`
+ *
+ * Because both outcomes are success and they mean different things to the
+ * person reading the result. The first machine to run this bootstrapped a
+ * catalogue; the second joined one that a colleague already made, which is the
+ * ordinary case and must not read as a collision. The catalogue decides which
+ * happened — this only reports it.
+ */
+export interface ProvisionedProduct {
+  readonly productKey: string;
+  readonly name: string;
+  readonly created: boolean;
+}
+
+export async function provisionProduct(
+  apiUrl: string,
+  grant: string,
+  input: { key: string; name: string; repo?: string; repoPath?: string },
+  fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+  timeoutMs = 10_000,
+): Promise<ProvisionedProduct> {
+  const url = `${apiUrl.replace(/\/+$/, "")}/v1/orchestrator/products`;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${grant}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        product_key: input.key,
+        name: input.name,
+        ...(input.repo ? { repo: input.repo } : {}),
+        ...(input.repoPath ? { repo_path: input.repoPath } : {}),
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new RegistrationError(
+      `could not reach ${apiUrl} to create the product ` +
+        `(${error instanceof Error ? error.message : String(error)})`,
+      undefined,
+    );
+  }
+
+  if (!response.ok) {
+    // The API's message is the useful part and is safe to repeat: a 403 here
+    // names what this machine's grant may not do, which is a fact about a
+    // credential the reader already holds.
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { message?: unknown };
+      if (typeof body.message === "string") detail = body.message;
+    } catch {
+      /* a body that is not JSON adds nothing to the status */
+    }
+    throw new RegistrationError(detail, response.status);
+  }
+
+  const body = (await response.json()) as Record<string, unknown>;
+  const productKey = str(body.product_key);
+  if (!productKey) {
+    throw new RegistrationError(
+      "the catalogue accepted the request but named no product",
+      response.status,
+    );
+  }
+
+  return {
+    productKey,
+    name: str(body.name) ?? productKey,
+    created: body.created === true,
   };
 }

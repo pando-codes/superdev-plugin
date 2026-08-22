@@ -61,9 +61,11 @@ import {
 import {
   loadGrant,
   pinnedRoleOf,
+  ProductBindingMissingError,
   registerAgent,
   RegistrationError,
 } from "./grant.ts";
+import { createBootstrapServer } from "./bootstrap.ts";
 import { resolveSurface } from "./roles.ts";
 import { createMcpServer } from "./server.ts";
 
@@ -343,11 +345,50 @@ async function startPinnedFromConfiguredKey(pinned: Role, absent: ConfigError): 
  * arriving through a network failure nobody would think to test, which is the
  * exact escalation the pinning exists to prevent.
  */
+/**
+ * 040. A live grant, an unbound repository, and one tool that fixes it.
+ *
+ * WHY THIS DOES NOT REGISTER, RETRY, OR RESTART ITSELF
+ *
+ * Because a server's credential is resolved once, at startup, and that is the
+ * property the pinning rests on. A server that re-registered mid-session after
+ * something a tool call did would be a server whose authority changed in
+ * response to a request — which is the shape of the thing 039 removed, arriving
+ * by a back door. So the tool binds the repository, says plainly that a reload
+ * is needed, and this process stays exactly as unprivileged as it started.
+ */
+async function startBootstrap(missing: ProductBindingMissingError): Promise<void> {
+  note(missing.message.split("\n")[0]!);
+  note(
+    "this machine's grant may be able to create it — offering catalog_bind_repository " +
+      "and nothing else, because this server holds no key until a product exists.",
+  );
+
+  const server = createBootstrapServer({
+    apiUrl: missing.apiUrl,
+    grant: missing.grant,
+    productPath: missing.productPath,
+    projectDir: ENV.CLAUDE_PROJECT_DIR?.trim() || process.cwd(),
+    note,
+  });
+
+  await server.connect(new StdioServerTransport());
+  note("1 tool offered: catalog_bind_repository");
+}
+
 async function startPinned(pinned: Role): Promise<void> {
   let grant;
   try {
     grant = loadGrant(pinned);
   } catch (error) {
+    // 040. A live grant and an unbound repository is the one failure this
+    // session can fix by itself, and only on the server whose role creates
+    // products anyway. Checked before the ConfigError branch below, because
+    // this IS a ConfigError and the generic path would swallow it.
+    if (error instanceof ProductBindingMissingError && pinned === "product-manager") {
+      await startBootstrap(error);
+      return;
+    }
     if (!(error instanceof ConfigError)) throw error;
     // No grant on this machine. That is not automatically a dead end: a
     // configured `keys.<role>` was already the arrangement before grants

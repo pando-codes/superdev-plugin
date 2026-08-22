@@ -217,3 +217,86 @@ describe("what pins a server", () => {
     expect(started.whoami.text).not.toContain("orchestrator grant");
   }, 30_000);
 });
+
+/**
+ * 040. The bootstrap server, and the line it must not cross.
+ *
+ * WHAT IS ACTUALLY UNDER TEST
+ *
+ * Not that binding works — that needs a catalogue, and the backend suite proves
+ * it against a real one. What only exists here is WHICH SERVER IS OFFERED THE
+ * TOOL. A builder that could conjure the product it then writes features under
+ * would be choosing its own subject, which is the same shape of mistake as
+ * choosing its own role, and it would look like a convenience while it did it.
+ */
+describe("a repository with no product binding (040)", () => {
+  /** Lists tools without calling one — the bootstrap server has no whoami. */
+  async function toolsOf(env: Record<string, string>, cwd: string): Promise<string[]> {
+    const client = new Client({ name: "bootstrap", version: "0.0.0" });
+    const transport = new StdioClientTransport({
+      command: await runtime(),
+      args: [BUNDLE],
+      cwd,
+      env: { PATH: process.env.PATH ?? "", ...env },
+    });
+    try {
+      await client.connect(transport);
+      return (await client.listTools()).tools.map((t) => t.name).sort();
+    } finally {
+      await client.close();
+    }
+  }
+
+  /** A grant on disk, and a project directory deliberately holding no binding. */
+  function machine(): { env: Record<string, string>; project: string } {
+    const home = dir();
+    const project = dir();
+    writeJson(home, "orchestrator.json", {
+      api_url: "http://catalog.invalid",
+      grant: "pcat_live_0000000000000000000000000000000000000000",
+    });
+    return {
+      env: { SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project },
+      project,
+    };
+  }
+
+  test("the product-manager server offers exactly one tool, and it is the one that fixes this", async () => {
+    const { env, project } = machine();
+    const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "product-manager" }, project);
+
+    // Exactly one. Registering the catalogue surface here would be a lie — this
+    // server holds no key and every one of those tools would refuse — and worse,
+    // it would invite an agent to plan around them.
+    expect(tools).toEqual(["catalog_bind_repository"]);
+  });
+
+  test("the engineer server does NOT, and stays inert", async () => {
+    const { env, project } = machine();
+    const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "engineer" }, project);
+
+    expect(tools).not.toContain("catalog_bind_repository");
+    // Its own menu, unusable, exactly as before 040: the fix for a builder is
+    // still somebody else binding the repository.
+    expect(tools).toEqual([...toolsForRole("engineer")].sort());
+  });
+
+  test("the quality-assurance server does not either", async () => {
+    const { env, project } = machine();
+    const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "quality-assurance" }, project);
+    expect(tools).not.toContain("catalog_bind_repository");
+  });
+
+  test("and once a binding exists, the product-manager server is an ordinary pinned server again", async () => {
+    const { env, project } = machine();
+    writeJson(project, "product.json", { product_key: "reelmates" }, 0o644);
+
+    const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "product-manager" }, project);
+
+    // It cannot reach http://catalog.invalid to register, so it is inert — but
+    // inert with its ROLE's menu, not with the bootstrap tool. The bootstrap
+    // server exists for one condition and disappears when that condition does.
+    expect(tools).not.toContain("catalog_bind_repository");
+    expect(tools).toEqual([...toolsForRole("product-manager")].sort());
+  });
+});

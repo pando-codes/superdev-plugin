@@ -17,16 +17,39 @@ This skill creates them, once.
 ## Step 0: Make sure there is somewhere to write
 
 Confirm the catalog is reachable before doing anything else: call `catalog_whoami` and report
-the role it names.  If the `catalog_*` tools are not in this session, stop here and say so —
-everything below is pointless without them, and the fix is two environment variables rather than
-anything you can do from inside the session.  See
-`${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`.
+the role it names.  If no `catalog_*` tool is in this session at all, stop here and say so —
+everything below is pointless without them, and the fix is a credential rather than anything you
+can do from inside the session.  See `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`.
+
+One case looks like that and is not: a session offering **only** `catalog_bind_repository`. Read
+the next section before concluding anything is wrong.
+
+### Before anything else: is `catalog_bind_repository` the only tool you can see?
+
+Then this repository has no product yet, this machine holds a grant that can create one, and the
+server is offering exactly one tool because there is exactly one useful thing to do. This is the
+ordinary state of a fresh checkout on a configured machine — not a fault.
+
+1. Propose the `key` and `name` as Path A step 2 describes, and **confirm them with the user**.
+   The key is permanent: nothing in this system renames or deletes a product.
+2. Call `catalog_bind_repository`. It creates the product, records the repository, and writes
+   `.superdev/product.json` for you — do not write that file yourself.
+3. **If it answers `created: false`,** a colleague's machine already catalogued this repository
+   and you have joined their product rather than making a second one. Say so; the key you
+   proposed was not used.
+4. Tell the user to commit the binding and **reload the session**, then stop. The catalogue tools
+   cannot appear until they do — every server resolved its credentials at startup — so there is
+   nothing further this run can do. Resume at Step 1 after the reload.
+
+Do not interview for capabilities first. An interview that ends at a server which cannot write
+them has wasted the user's time, and the reload discards nothing except your place in this file.
 
 ### Two ways to initialize, and `catalog_whoami` says which one you are in
 
-There are two, because there are two ways a product comes to exist. **Read the `writes` block
-before anything else** — it decides which of these you are doing, and getting it wrong means
-interviewing someone for half an hour and then being refused the write.
+Once the catalogue tools are present there are two, because there are two ways a product comes to
+exist from here. **Read the `writes` block before anything else** — it decides which of these you
+are doing, and getting it wrong means interviewing someone for half an hour and then being
+refused the write.
 
 | `catalog_whoami` says | What it means | What to do |
 |---|---|---|
@@ -197,6 +220,10 @@ owns:
 ```json
 { "product_key": "reelmates" }
 ```
+
+**On the bind-repository path you have already done this** — `catalog_bind_repository` wrote the
+file itself, including the repository it read from the checkout, and writing over it by hand
+would drop that. Skip to committing it.
 
 This is what Step 1 reads on any future run, and what every other skill uses to scope its
 queries to the right product.  **Write it in the same breath as the product row** — a product
