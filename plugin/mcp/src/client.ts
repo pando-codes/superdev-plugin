@@ -12,6 +12,8 @@
  * the same database, the same RLS. It only removes the socket.
  */
 
+import { recall, remember } from "./cache.ts";
+
 export interface CatalogClientOptions {
   readonly baseUrl: string;
   readonly apiKey: string;
@@ -22,6 +24,15 @@ export interface CatalogClientOptions {
    */
   readonly agentId?: string;
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * Where the read cache lives, or undefined to keep no cache at all.
+   *
+   * A workspace directory rather than a flag: the cache is per-workspace for
+   * the same reason the journal is, and a client built without one — every
+   * client in the test suite, and the inert one an unconfigured server holds —
+   * simply never reads or writes a file.
+   */
+  readonly cacheHome?: string;
 }
 
 export interface ApiResult<T = unknown> {
@@ -61,12 +72,14 @@ export class CatalogClient {
   readonly #apiKey: string;
   readonly #agentId: string | undefined;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #cacheHome: string | undefined;
 
   constructor(options: CatalogClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.#apiKey = options.apiKey;
     this.#agentId = options.agentId;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#cacheHome = options.cacheHome;
   }
 
   /** The process-wide identity, for tools that want to report it. */
@@ -118,8 +131,30 @@ export class CatalogClient {
     return { ok: true, status: response.status, body: body as T };
   }
 
-  get<T = unknown>(path: string, asAgent?: string): Promise<ApiResult<T>> {
-    return this.request<T>("GET", path, undefined, asAgent);
+  /**
+   * A read, answered from the last good response when the catalogue cannot be
+   * reached at all.
+   *
+   * ONLY when it cannot be reached. An `ApiError` is a real answer — 401, 403,
+   * 404 — and serving a cached success in its place would tell an agent it may
+   * read something the catalogue has just refused it. So the ApiError is
+   * rethrown untouched and only a transport failure falls back.
+   *
+   * A cache miss rethrows too, and that is deliberate: "the catalogue is
+   * unreachable" is a far better answer than an empty list, which an agent
+   * would read as "there is nothing there".
+   */
+  async get<T = unknown>(path: string, asAgent?: string): Promise<ApiResult<T>> {
+    try {
+      const result = await this.request<T>("GET", path, undefined, asAgent);
+      if (this.#cacheHome !== undefined) await remember(this.#cacheHome, path, result.body);
+      return result;
+    } catch (error) {
+      if (this.#cacheHome === undefined || error instanceof ApiError) throw error;
+      const cached = await recall(this.#cacheHome, path);
+      if (cached === undefined) throw error;
+      return { ok: true, status: 200, body: cached as T };
+    }
   }
   post<T = unknown>(path: string, payload: unknown, asAgent?: string): Promise<ApiResult<T>> {
     return this.request<T>("POST", path, payload, asAgent);

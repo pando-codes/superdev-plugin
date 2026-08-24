@@ -314,6 +314,14 @@ export interface RegisteredKey {
   readonly apiKey: string;
   readonly keyPrefix: string;
   readonly pandoRole: string;
+  /**
+   * 044's tenants, handed down from the grant's ceiling.
+   *
+   * Undefined when the catalogue is older than 044 and did not say — which is
+   * not the same as a key carrying none, so it is left undefined and nothing is
+   * narrowed. See stdio.ts's KeyIdentity for the same distinction.
+   */
+  readonly tenants: readonly string[] | undefined;
   readonly agentId: string;
   readonly expiresAt: string;
 }
@@ -393,6 +401,9 @@ export async function registerAgent(
     apiKey,
     keyPrefix: str(body.key_prefix) ?? "",
     pandoRole: str(body.pando_role) ?? config.pinnedRole,
+    tenants: Array.isArray(body.tenants)
+      ? body.tenants.filter((t: unknown): t is string => typeof t === "string")
+      : undefined,
     agentId: str(body.agent_id) ?? config.agentId,
     expiresAt: str(body.expires_at) ?? "",
   };

@@ -21839,6 +21839,44 @@ class StdioServerTransport {
   }
 }
 
+// mcp/src/cache.ts
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+function cacheDir(home) {
+  return join(home, ".superdev", "cache");
+}
+function entryPath(home, path) {
+  const digest = createHash("sha256").update(path).digest("hex").slice(0, 32);
+  return join(cacheDir(home), `${digest}.json`);
+}
+async function remember(home, path, body) {
+  try {
+    const file2 = entryPath(home, path);
+    await mkdir(cacheDir(home), { recursive: true });
+    const entry = { path, fetched_at: new Date().toISOString(), body };
+    await writeFile(file2, `${JSON.stringify(entry)}
+`, "utf8");
+  } catch {}
+}
+async function recall(home, path) {
+  try {
+    const file2 = entryPath(home, path);
+    if (!existsSync(file2))
+      return;
+    const entry = JSON.parse(await readFile(file2, "utf8"));
+    if (entry.path !== path)
+      return;
+    if (entry.body !== null && typeof entry.body === "object" && !Array.isArray(entry.body)) {
+      return { ...entry.body, stale_as_of: entry.fetched_at };
+    }
+    return { stale_as_of: entry.fetched_at, body: entry.body };
+  } catch {
+    return;
+  }
+}
+
 // mcp/src/client.ts
 class ApiError extends Error {
   status;
@@ -21860,11 +21898,13 @@ class CatalogClient {
   #apiKey;
   #agentId;
   #fetch;
+  #cacheHome;
   constructor(options) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.#apiKey = options.apiKey;
     this.#agentId = options.agentId;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#cacheHome = options.cacheHome;
   }
   get agentId() {
     return this.#agentId;
@@ -21890,8 +21930,20 @@ class CatalogClient {
       throw ApiError.from(response.status, body);
     return { ok: true, status: response.status, body };
   }
-  get(path, asAgent) {
-    return this.request("GET", path, undefined, asAgent);
+  async get(path, asAgent) {
+    try {
+      const result = await this.request("GET", path, undefined, asAgent);
+      if (this.#cacheHome !== undefined)
+        await remember(this.#cacheHome, path, result.body);
+      return result;
+    } catch (error51) {
+      if (this.#cacheHome === undefined || error51 instanceof ApiError)
+        throw error51;
+      const cached2 = await recall(this.#cacheHome, path);
+      if (cached2 === undefined)
+        throw error51;
+      return { ok: true, status: 200, body: cached2 };
+    }
   }
   post(path, payload, asAgent) {
     return this.request("POST", path, payload, asAgent);
@@ -21906,9 +21958,9 @@ class CatalogClient {
 var seg = (value) => encodeURIComponent(value);
 
 // mcp/src/config.ts
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync as existsSync2, readFileSync, statSync } from "node:fs";
 import { homedir, hostname as hostname3 } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join as join2, resolve } from "node:path";
 var PORTAL_URL = "https://superdev-portal.vercel.app";
 var ACCESS_REQUEST_URL = "https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml";
 var ROLES = [
@@ -21926,7 +21978,7 @@ function isRole(value) {
 class ConfigError extends Error {
 }
 function readJson(path) {
-  if (!existsSync(path))
+  if (!existsSync2(path))
     return;
   let text;
   try {
@@ -21980,11 +22032,11 @@ function projectConfigPath(env, cwd) {
   if (explicit)
     return isAbsolute(explicit) ? explicit : resolve(cwd, explicit);
   const projectDir = str(env.CLAUDE_PROJECT_DIR) ?? cwd;
-  return join(projectDir, ".superdev", "config.json");
+  return join2(projectDir, ".superdev", "config.json");
 }
 function userConfigPath(env) {
   const home = str(env.SUPERDEV_HOME) ?? homedir();
-  return join(home, ".superdev", "config.json");
+  return join2(home, ".superdev", "config.json");
 }
 function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
   const env = withoutUnexpandedPlaceholders(rawEnv);
@@ -22081,9 +22133,9 @@ function sanitizeAgentId(value) {
 }
 
 // mcp/src/grant.ts
-import { existsSync as existsSync2, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
+import { existsSync as existsSync3, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
 import { homedir as homedir2, hostname as hostname4 } from "node:os";
-import { isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join3, resolve as resolve2 } from "node:path";
 var DEFAULT_TTL_MINUTES = 720;
 
 class ProductBindingMissingError extends ConfigError {
@@ -22102,17 +22154,17 @@ class ProductBindingMissingError extends ConfigError {
 var str2 = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 function grantConfigPath(env) {
   const home = str2(env.SUPERDEV_HOME) ?? homedir2();
-  return join2(home, ".superdev", "orchestrator.json");
+  return join3(home, ".superdev", "orchestrator.json");
 }
 function productConfigPath(env, cwd) {
   const explicit = str2(env.SUPERDEV_PRODUCT_CONFIG);
   if (explicit)
     return isAbsolute2(explicit) ? explicit : resolve2(cwd, explicit);
   const projectDir = str2(env.CLAUDE_PROJECT_DIR) ?? cwd;
-  return join2(projectDir, ".superdev", "product.json");
+  return join3(projectDir, ".superdev", "product.json");
 }
 function readJsonObject(path) {
-  if (!existsSync2(path))
+  if (!existsSync3(path))
     return;
   let text;
   try {
@@ -22278,6 +22330,7 @@ async function registerAgent(config2, fetchImpl = globalThis.fetch, timeoutMs = 
     apiKey,
     keyPrefix: str2(body.key_prefix) ?? "",
     pandoRole: str2(body.pando_role) ?? config2.pinnedRole,
+    tenants: Array.isArray(body.tenants) ? body.tenants.filter((t) => typeof t === "string") : undefined,
     agentId: str2(body.agent_id) ?? config2.agentId,
     expiresAt: str2(body.expires_at) ?? ""
   };
@@ -29840,6 +29893,12 @@ This machine's grant exists and may not create products — that is a ` + `ceili
   return server;
 }
 
+// mcp/src/workspace.ts
+function workspaceRoot() {
+  const declared = process.env.CLAUDE_PROJECT_DIR;
+  return declared !== undefined && declared.trim() !== "" ? declared : process.cwd();
+}
+
 // mcp/src/tools/evidence.ts
 var evidenceTools = [
   {
@@ -30132,10 +30191,331 @@ var readTools = [
   }
 ];
 
+// mcp/src/journal.ts
+import { appendFile, mkdir as mkdir2, readFile as readFile2, writeFile as writeFile2 } from "node:fs/promises";
+import { existsSync as existsSync4 } from "node:fs";
+import { dirname as dirname2, join as join4 } from "node:path";
+import { randomUUID } from "node:crypto";
+function journalDir(home) {
+  return join4(home, ".superdev", "journal");
+}
+function journalPath(home, stream) {
+  return join4(journalDir(home), `${stream}.ndjson`);
+}
+function cursorPath(home, stream) {
+  return join4(journalDir(home), `${stream}.cursor`);
+}
+async function append(home, stream, productKey2, payload, asAgent) {
+  const record3 = {
+    client_id: randomUUID(),
+    product_key: productKey2,
+    journalled_at: new Date().toISOString(),
+    ...asAgent === undefined ? {} : { as_agent: asAgent },
+    payload
+  };
+  const path = journalPath(home, stream);
+  await mkdir2(dirname2(path), { recursive: true });
+  await appendFile(path, `${JSON.stringify(record3)}
+`, "utf8");
+  return record3;
+}
+async function readAll(home, stream) {
+  const path = journalPath(home, stream);
+  if (!existsSync4(path))
+    return [];
+  const text = await readFile2(path, "utf8");
+  const records = [];
+  for (const line of text.split(`
+`)) {
+    const trimmed = line.trim();
+    if (trimmed === "")
+      continue;
+    try {
+      records.push(JSON.parse(trimmed));
+    } catch {
+      continue;
+    }
+  }
+  return records;
+}
+async function readCursor(home, stream) {
+  const path = cursorPath(home, stream);
+  if (!existsSync4(path))
+    return 0;
+  const value = Number.parseInt((await readFile2(path, "utf8")).trim(), 10);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+async function writeCursor(home, stream, position) {
+  const path = cursorPath(home, stream);
+  await mkdir2(dirname2(path), { recursive: true });
+  await writeFile2(path, `${position}
+`, "utf8");
+}
+async function status(home, stream) {
+  const [records, cursor] = await Promise.all([readAll(home, stream), readCursor(home, stream)]);
+  const drained = Math.min(cursor, records.length);
+  return {
+    stream,
+    total: records.length,
+    drained,
+    pending: records.length - drained
+  };
+}
+
+// mcp/src/drain.ts
+var ENDPOINT = {
+  correspondence: {
+    path: (product) => `/v1/products/${seg(product)}/messages/drain`,
+    field: "messages"
+  },
+  decision: {
+    path: (product) => `/v1/products/${seg(product)}/decisions/drain`,
+    field: "rulings"
+  },
+  "work-progress": {
+    path: () => "/v1/work-notes/drain",
+    field: "notes"
+  }
+};
+var MAX_BATCH = 500;
+var groupKey = (r) => `${r.product_key}\x00${r.as_agent ?? ""}`;
+async function drain(client, home, stream) {
+  const records = await readAll(home, stream);
+  const cursor = Math.min(await readCursor(home, stream), records.length);
+  const waiting = records.slice(cursor);
+  if (waiting.length === 0) {
+    return { stream, attempted: 0, landed: 0, duplicates: 0, still_pending: 0 };
+  }
+  const { path, field } = ENDPOINT[stream];
+  const failedGroups = new Set;
+  let landed = 0;
+  let duplicates = 0;
+  let problem;
+  const groups = new Map;
+  for (const record3 of waiting) {
+    const key = groupKey(record3);
+    const existing = groups.get(key);
+    if (existing)
+      existing.push(record3);
+    else
+      groups.set(key, [record3]);
+  }
+  for (const [key, group] of groups) {
+    const productKey2 = group[0].product_key;
+    const asAgent = group[0].as_agent;
+    for (let i = 0;i < group.length; i += MAX_BATCH) {
+      const batch = group.slice(i, i + MAX_BATCH);
+      const body = {
+        [field]: batch.map((r) => ({ ...r.payload, client_id: r.client_id }))
+      };
+      try {
+        const result = await client.post(path(productKey2), body, asAgent);
+        landed += result.body?.landed ?? 0;
+        duplicates += result.body?.duplicates ?? 0;
+      } catch (error51) {
+        failedGroups.add(key);
+        const where = productKey2 === "" ? asAgent ?? "this agent" : productKey2;
+        problem ??= error51 instanceof ApiError ? `${where}: the catalogue answered ${error51.status} (${error51.message})` : `${where}: ${error51 instanceof Error ? error51.message : String(error51)}`;
+        break;
+      }
+    }
+  }
+  let advance = waiting.length;
+  if (failedGroups.size > 0) {
+    const firstBad = waiting.findIndex((r) => failedGroups.has(groupKey(r)));
+    advance = firstBad === -1 ? waiting.length : firstBad;
+  }
+  await writeCursor(home, stream, cursor + advance);
+  return {
+    stream,
+    attempted: waiting.length,
+    landed,
+    duplicates,
+    still_pending: waiting.length - advance,
+    ...problem === undefined ? {} : { problem }
+  };
+}
+
+// mcp/src/tools/tenants.ts
+var SUBJECT_HELP = "Optional. What this is ABOUT, as a namespaced reference: " + "'superdev:delivery/work_item/wi_a1b2c3', 'local:agent-suite/work-item/wi_a1b2c3'. " + "A bare 'wi_a1b2c3' is REFUSED — two systems mint that shape over different id " + "spaces, and an unnamespaced reference is ambiguous between them. The target is " + "never verified: it may live in a tenant this catalogue does not have.";
+var subject = exports_external.string().optional().describe(SUBJECT_HELP);
+var tenantTools = [
+  {
+    name: "catalog_send_message",
+    title: "Send a message to another agent",
+    description: "Send one message to one named agent. Requires the `correspondence` tenant.\n\n" + "ONE RECIPIENT. To reach two agents, send two messages. Asking one agent to pass " + "something on loses the record that the second was told, and makes the sender's account " + `of what happened depend on a third party doing something it was never asked to do.
+
+` + "WRITES LOCALLY FIRST and drains to the catalogue afterwards, so this succeeds with no " + "network. The answer says whether it has reached the catalogue yet; if it has not, it " + `will on the next drain and nothing is lost.
+
+` + "This is for JUDGMENT — an opinion, an escalation, a question, a heads-up. A request " + "that is a UNIT OF WORK belongs in the queue instead: file it with catalog_file_work so " + "it can be claimed, leased, and judged against criteria. A message asking someone to " + "build something is a message nobody is accountable for.",
+    inputSchema: {
+      product_key: exports_external.string().describe("Which product's correspondence this belongs to."),
+      recipient: exports_external.string().describe("The agent this is addressed to, e.g. 'quality-assurance'."),
+      kind: exports_external.enum(["event", "metric", "request", "decision-request"]).describe("event: something happened. metric: a measurement. request: please do/answer this. " + "decision-request: a Head must rule on this."),
+      body: exports_external.string().describe("What you are actually saying. Write it for the recipient."),
+      subject
+    },
+    handler: async (client, args) => {
+      const { product_key, ...payload } = args;
+      const home = workspaceRoot();
+      const record3 = await append(home, "correspondence", product_key, payload);
+      const outcome = await drain(client, home, "correspondence");
+      return {
+        journalled: true,
+        client_id: record3.client_id,
+        delivered: outcome.still_pending === 0,
+        drain: outcome
+      };
+    }
+  },
+  {
+    name: "catalog_read_messages",
+    title: "Read messages",
+    description: "Read correspondence in a product, newest first. Requires the `correspondence` tenant.\n\n" + "Reads the CATALOGUE, not the local journal, so a message this machine has journalled " + "but not yet drained will not appear. Call catalog_drain_journal first if you have just " + `sent something and need to see it here.
+
+` + "Not restricted to messages addressed to you: reconstructing what happened between two " + "other agents is a normal thing to need, and a report that could only see its own inbox " + "would be wrong about everything else.",
+    inputSchema: {
+      product_key: exports_external.string(),
+      recipient: exports_external.string().optional().describe("Only messages addressed to this agent."),
+      sender: exports_external.string().optional().describe("Only messages from this agent."),
+      subject: exports_external.string().optional().describe("Only messages about this exact subject key."),
+      since: exports_external.string().optional().describe("ISO 8601. Only messages after this instant."),
+      limit: exports_external.number().int().positive().max(500).optional()
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => {
+      const { product_key, ...query } = args;
+      const qs = new URLSearchParams;
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined)
+          qs.set(key, String(value));
+      }
+      const suffix = qs.toString();
+      return (await client.get(`/v1/products/${seg(product_key)}/messages${suffix ? `?${suffix}` : ""}`)).body;
+    }
+  },
+  {
+    name: "catalog_record_decision",
+    title: "Record a decision",
+    description: "Record one ruling on one question. Requires the `decision` tenant AND a Head role — " + `every other role is refused by the database, and that refusal is the point.
+
+` + "A decision is the one thing here written to be READ LATER, by someone who was not in " + "the room. So `rationale` is required and is the field that matters: what was traded " + "against what. 'Approved' is not a rationale, and a ruling whose reasoning was not " + `written down cannot be revisited — only re-argued.
+
+` + "APPEND-ONLY. A ruling that turns out to be wrong is superseded by a NEWER one with " + "disposition 'superseded' or a fresh verdict; nothing is edited, because the history of " + `what was believed when is what makes the record worth keeping.
+
+` + "You may not rule on your own request. `requested_by` must be somebody else.\n\n" + "Writes locally first and drains afterwards, exactly as catalog_send_message does.",
+    inputSchema: {
+      product_key: exports_external.string(),
+      key: exports_external.string().describe("'dec_' plus exactly six lowercase alphanumerics, e.g. 'dec_7bq1lm'. Global."),
+      domain: exports_external.string().describe("Which org ruled, e.g. 'engineering', 'growth', 'creative', 'operations'."),
+      requested_by: exports_external.string().describe("Who asked. Must not be you."),
+      question: exports_external.string().describe("What was being decided, in one line."),
+      disposition: exports_external.enum(["accepted", "rejected", "deferred", "superseded"]).describe("deferred is a real decision and worth recording as one — it says the question was " + "considered and left open, which silence does not."),
+      rationale: exports_external.string().describe("The trade-off, named. What was given up for what."),
+      consequences: exports_external.string().optional().describe("What follows. 'Nothing changes' is a real answer."),
+      subject
+    },
+    handler: async (client, args) => {
+      const { product_key, ...payload } = args;
+      const home = workspaceRoot();
+      const record3 = await append(home, "decision", product_key, payload);
+      const outcome = await drain(client, home, "decision");
+      return {
+        journalled: true,
+        client_id: record3.client_id,
+        delivered: outcome.still_pending === 0,
+        drain: outcome
+      };
+    }
+  },
+  {
+    name: "catalog_read_decisions",
+    title: "Read decisions",
+    description: "Read rulings in a product, newest first. Requires the `decision` tenant.\n\n" + "Open to every role, not only Heads: a decision binds the agents who did not make it, " + `and one they cannot read is one they cannot follow.
+
+` + "Read these before re-arguing something. A `deferred` ruling means the question was " + "considered and left open on purpose, which is different from nobody having thought " + "about it.",
+    inputSchema: {
+      product_key: exports_external.string(),
+      domain: exports_external.string().optional().describe("Only rulings from this domain."),
+      subject: exports_external.string().optional().describe("Only rulings about this exact subject key."),
+      limit: exports_external.number().int().positive().max(500).optional()
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (client, args) => {
+      const { product_key, ...query } = args;
+      const qs = new URLSearchParams;
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined)
+          qs.set(key, String(value));
+      }
+      const suffix = qs.toString();
+      return (await client.get(`/v1/products/${seg(product_key)}/decisions${suffix ? `?${suffix}` : ""}`)).body;
+    }
+  },
+  {
+    name: "catalog_drain_journal",
+    title: "Drain the local journal",
+    description: `Send everything this machine has journalled but not yet delivered.
+
+` + "Sends, decisions, and progress notes already drain themselves, so this is for the case " + "where that " + "failed: the catalogue was unreachable, the key was not yet configured, or the tenant " + "was not enabled at the time. Call it after fixing any of those, or when you want to " + `know whether anything is still waiting.
+
+` + "Safe to call repeatedly and safe to call when there is nothing to do. Delivery is " + "AT-LEAST-ONCE: a record the catalogue already has is reported as a duplicate and " + "written again by nobody. `still_pending` above zero means something is still waiting, " + "and `problem` says what stopped it.",
+    inputSchema: {
+      stream: exports_external.enum(["correspondence", "decision", "work-progress"]).optional().describe("Which journal. Omitted drains all three.")
+    },
+    handler: async (client, args) => {
+      const home = workspaceRoot();
+      const streams = args.stream === undefined ? ["correspondence", "decision", "work-progress"] : [args.stream];
+      const outcomes = [];
+      for (const stream of streams) {
+        outcomes.push(await drain(client, home, stream));
+      }
+      return { journal_root: home, drained: outcomes };
+    }
+  },
+  {
+    name: "catalog_journal_status",
+    title: "What is waiting in the local journal",
+    description: `How many records this machine has journalled, and how many have reached the catalogue.
+
+` + "Touches no network, so it answers while the catalogue is down — which is exactly when " + "'has anything been lost?' is worth asking. Nothing has: `pending` is what is still on " + `disk waiting, and catalog_drain_journal is what moves it.
+
+` + "The journal is this MACHINE's outbox, not shared state — anything drained already lives " + "in the catalogue, and the cursor is per-machine. `.superdev/journal/` belongs in the " + "workspace's .gitignore; committing it makes two checkouts disagree about what has been " + "sent.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+    handler: async (_client, _args) => {
+      const home = workspaceRoot();
+      return {
+        journal_root: home,
+        streams: [
+          await status(home, "correspondence"),
+          await status(home, "decision"),
+          await status(home, "work-progress")
+        ]
+      };
+    }
+  }
+];
+
 // mcp/src/tools/work.ts
 var agentIdField = exports_external.string().min(1).max(64).optional().describe("Who is acting, if not this server's configured identity. Pass a distinct id " + "when several agents share one session — otherwise they are the same agent to " + "the catalogue and can release or finish each other's work by accident. It " + "changes WHO holds a claim, never WHAT this key is allowed to do.");
 var productKey2 = exports_external.string().describe("Product slug, from .superdev/product.json.");
 var workItemKey = exports_external.string().regex(/^wi_[a-z0-9]{6}$/, "wi_ followed by exactly six lowercase alphanumerics").describe("Work item key, e.g. wi_a1b2c3.");
+async function serverOnly(what, run) {
+  try {
+    return await run();
+  } catch (error51) {
+    if (error51 instanceof ApiError)
+      throw error51;
+    return {
+      unavailable: true,
+      operation: what,
+      reason: error51 instanceof Error ? error51.message : String(error51),
+      explanation: `${what} cannot be done offline and cannot be journalled: it is the queue's mutual ` + "exclusion, and two agents resolving that after the fact would mean discarding work " + "somebody already did.",
+      what_you_can_still_do: "Keep working the item you already hold, and keep calling catalog_push_progress — " + "notes are append-only and journal locally, so they will land when the catalogue is " + "reachable again, even if this lease has expired by then. Do not take new work."
+    };
+  }
+}
 var workTools = [
   {
     name: "catalog_claim_work",
@@ -30157,7 +30537,7 @@ var workTools = [
     },
     handler: async (client, args) => {
       const { agent_id, ...payload } = args;
-      return (await client.post("/v1/work-items/claim", payload, agent_id)).body;
+      return serverOnly("Claiming work", async () => (await client.post("/v1/work-items/claim", payload, agent_id)).body);
     }
   },
   {
@@ -30213,7 +30593,7 @@ var workTools = [
     },
     handler: async (client, args) => {
       const { work_item_key, agent_id, ...payload } = args;
-      return (await client.post(`/v1/work-items/${seg(work_item_key)}/heartbeat`, payload, agent_id)).body;
+      return serverOnly("Heartbeating a lease", async () => (await client.post(`/v1/work-items/${seg(work_item_key)}/heartbeat`, payload, agent_id)).body);
     }
   },
   {
@@ -30238,7 +30618,15 @@ var workTools = [
     },
     handler: async (client, args) => {
       const { work_item_key, agent_id, ...payload } = args;
-      return (await client.post(`/v1/work-items/${seg(work_item_key)}/notes`, payload, agent_id)).body;
+      const home = workspaceRoot();
+      const record3 = await append(home, "work-progress", "", { ...payload, work_item_key }, agent_id);
+      const outcome = await drain(client, home, "work-progress");
+      return {
+        journalled: true,
+        client_id: record3.client_id,
+        delivered: outcome.still_pending === 0,
+        drain: outcome
+      };
     }
   },
   {
@@ -30264,7 +30652,7 @@ var workTools = [
     },
     handler: async (client, args) => {
       const { work_item_key, agent_id, ...payload } = args;
-      return (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload, agent_id)).body;
+      return serverOnly("Finishing work", async () => (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload, agent_id)).body);
     }
   },
   {
@@ -30549,7 +30937,8 @@ var allTools = [
   ...writeTools,
   ...linkTools,
   ...evidenceTools,
-  ...workTools
+  ...workTools,
+  ...tenantTools
 ];
 var toolsByName = new Map(allTools.map((tool) => [tool.name, tool]));
 
@@ -30575,6 +30964,12 @@ var HOLD_WORK = [
   "catalog_push_progress",
   "catalog_finish_work"
 ];
+var TENANT_TOOLS = {
+  correspondence: ["catalog_send_message", "catalog_read_messages"],
+  decision: ["catalog_read_decisions"]
+};
+var RULE = ["catalog_record_decision"];
+var JOURNAL = ["catalog_drain_journal", "catalog_journal_status"];
 var STEWARD_WORK = ["catalog_file_work", "catalog_steward_work"];
 var AUTHOR_MODEL = [
   "catalog_create_capability",
@@ -30597,8 +30992,16 @@ var WRITES_BY_ROLE = {
   revops: [...HOLD_WORK, "catalog_record_evidence"]
 };
 var ALL_TOOL_NAMES = new Set(allTools.map((t) => t.name));
+function tenantToolsForRole(role) {
+  const names = [...TENANT_TOOLS.correspondence, ...TENANT_TOOLS.decision, ...JOURNAL];
+  return role === "head-of-engineering" ? [...names, ...RULE] : names;
+}
 function toolsForRole(role) {
-  const names = new Set([...READS, ...WRITES_BY_ROLE[role]]);
+  const names = new Set([
+    ...READS,
+    ...WRITES_BY_ROLE[role],
+    ...tenantToolsForRole(role)
+  ]);
   for (const name of names) {
     if (!ALL_TOOL_NAMES.has(name)) {
       throw new Error(`roles.ts lists "${name}" for ${role}, but no such tool is registered`);
@@ -30606,26 +31009,51 @@ function toolsForRole(role) {
   }
   return names;
 }
-function resolveSurface(actualRole, declaredRole) {
+function narrowToTenants(names, tenants) {
+  if (tenants === undefined)
+    return { names, note: undefined };
+  const enabled = new Set(tenants);
+  const gated = new Set;
+  for (const [tenant, tools] of Object.entries(TENANT_TOOLS)) {
+    if (!enabled.has(tenant))
+      for (const tool of tools)
+        gated.add(tool);
+  }
+  if (!enabled.has("decision"))
+    for (const tool of RULE)
+      gated.add(tool);
+  if (!enabled.has("correspondence") && !enabled.has("decision")) {
+    for (const tool of JOURNAL)
+      gated.add(tool);
+  }
+  const kept = new Set([...names].filter((n) => !gated.has(n)));
+  const missing = ["correspondence", "decision"].filter((t) => !enabled.has(t));
+  return {
+    names: kept,
+    note: missing.length === 0 ? undefined : `without ${missing.join(" and ")}`
+  };
+}
+function resolveSurface(actualRole, declaredRole, tenants) {
   if (actualRole === undefined || !ROLES.includes(actualRole)) {
     const names = new Set(ALL_TOOL_NAMES);
     if (declaredRole !== undefined) {
       const narrowed = toolsForRole(declaredRole);
-      return {
-        names: new Set([...names].filter((n) => narrowed.has(n))),
-        basis: `declared role "${declaredRole}" (the catalogue's answer was unavailable)`
-      };
+      return withTenants(new Set([...names].filter((n) => narrowed.has(n))), `declared role "${declaredRole}" (the catalogue's answer was unavailable)`, tenants);
     }
-    return { names, basis: "every tool (the catalogue's answer was unavailable)" };
+    return withTenants(names, "every tool (the catalogue's answer was unavailable)", tenants);
   }
   const actual = toolsForRole(actualRole);
   if (declaredRole === undefined || declaredRole === actualRole) {
-    return { names: actual, basis: `role "${actualRole}"` };
+    return withTenants(actual, `role "${actualRole}"`, tenants);
   }
   const declared = toolsForRole(declaredRole);
+  return withTenants(new Set([...actual].filter((n) => declared.has(n))), `role "${actualRole}", narrowed to what "${declaredRole}" needs`, tenants);
+}
+function withTenants(names, basis, tenants) {
+  const narrowed = narrowToTenants(names, tenants);
   return {
-    names: new Set([...actual].filter((n) => declared.has(n))),
-    basis: `role "${actualRole}", narrowed to what "${declaredRole}" needs`
+    names: narrowed.names,
+    basis: narrowed.note === undefined ? basis : `${basis}, ${narrowed.note}`
   };
 }
 // schemas/acceptance-criterion.schema.json
@@ -31164,7 +31592,7 @@ var note = (line) => {
   process.stderr.write(`superdev: ${line}
 `);
 };
-async function actualRole(apiUrl, apiKey, agentId) {
+async function identifyKey(apiUrl, apiKey, agentId) {
   const timeout = AbortSignal.timeout(5000);
   try {
     const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/v1/whoami`, {
@@ -31176,7 +31604,7 @@ async function actualRole(apiUrl, apiKey, agentId) {
     });
     if (!response.ok) {
       note(response.status === 401 ? "the catalogue rejected this API key (401). It may be revoked, expired, or " + "from another environment. Every tool will still be offered, and every " + "call will fail until the key is replaced." : `whoami returned ${response.status}; offering every tool and letting the ` + "catalogue decide.");
-      return;
+      return { role: undefined, tenants: undefined };
     }
     const body = await response.json();
     const scope = body.writes?.product_key;
@@ -31185,10 +31613,13 @@ async function actualRole(apiUrl, apiKey, agentId) {
     const expiry = expiryWarning(body.key?.expires_in_days);
     if (expiry !== undefined)
       note(expiry);
-    return typeof body.pando_role === "string" ? body.pando_role : undefined;
+    return {
+      role: typeof body.pando_role === "string" ? body.pando_role : undefined,
+      tenants: Array.isArray(body.tenants) ? body.tenants.filter((t) => typeof t === "string") : undefined
+    };
   } catch (error51) {
     note(`could not reach ${apiUrl} to identify this key ` + `(${error51 instanceof Error ? error51.message : String(error51)}); ` + "offering every tool and letting the catalogue decide.");
-    return;
+    return { role: undefined, tenants: undefined };
   }
 }
 var EXPIRY_WARNING_DAYS = 14;
@@ -31208,10 +31639,11 @@ async function startConfigured({ config: config2, warnings }) {
   const client = new CatalogClient({
     baseUrl: config2.apiUrl,
     apiKey: config2.apiKey,
-    agentId: config2.agentId
+    agentId: config2.agentId,
+    cacheHome: workspaceRoot()
   });
-  const role = await actualRole(config2.apiUrl, config2.apiKey, config2.agentId);
-  const surface = resolveSurface(role, config2.declaredRole);
+  const identity = await identifyKey(config2.apiUrl, config2.apiKey, config2.agentId);
+  const surface = resolveSurface(identity.role, config2.declaredRole, identity.tenants);
   const server = createMcpServer(client, {
     toolNames: surface.names,
     surfaceBasis: surface.basis,
@@ -31336,9 +31768,10 @@ async function startPinned(pinned) {
   const client = new CatalogClient({
     baseUrl: grant.config.apiUrl,
     apiKey: registered.apiKey,
-    agentId: registered.agentId
+    agentId: registered.agentId,
+    cacheHome: workspaceRoot()
   });
-  const surface = resolveSurface(registered.pandoRole, pinned);
+  const surface = resolveSurface(registered.pandoRole, pinned, registered.tenants);
   const server = createMcpServer(client, {
     toolNames: surface.names,
     surfaceBasis: surface.basis,

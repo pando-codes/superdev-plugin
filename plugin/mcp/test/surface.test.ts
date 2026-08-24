@@ -34,6 +34,12 @@ const READS = [
   "catalog_public_catalog",
   "catalog_list_work",
   "catalog_get_work",
+  // 041/042's tenants. Reads, so they carry readOnlyHint like the rest.
+  "catalog_read_messages",
+  "catalog_read_decisions",
+  // Touches the local journal and no network, which makes it a read of this
+  // machine's state — it changes nothing anywhere.
+  "catalog_journal_status",
 ];
 
 /** Authority varies per tool; the database decides, not this list. */
@@ -57,6 +63,11 @@ const WRITES = [
   "catalog_finish_work",
   "catalog_file_work",
   "catalog_steward_work",
+  "catalog_send_message",
+  "catalog_record_decision",
+  // A write even though it sends nothing new: it moves records from this
+  // machine to the catalogue, which is a change of state somewhere.
+  "catalog_drain_journal",
 ];
 
 describe("the tool roster", () => {

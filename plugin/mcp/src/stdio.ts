@@ -66,6 +66,7 @@ import {
   RegistrationError,
 } from "./grant.ts";
 import { createBootstrapServer } from "./bootstrap.ts";
+import { workspaceRoot } from "./workspace.ts";
 import { resolveSurface } from "./roles.ts";
 import { createMcpServer } from "./server.ts";
 
@@ -87,13 +88,27 @@ const note = (line: string): void => {
 };
 
 /**
- * Asks the catalogue which role this key carries.
+ * Asks the catalogue what this key carries: its role, and since 043 its tenants.
  *
  * Bounded rather than left to the default HTTP timeout: this call is on the
  * startup path, and a catalogue that is merely slow must not turn into a
  * session that never gets its tools.
  */
-async function actualRole(apiUrl: string, apiKey: string, agentId: string): Promise<string | undefined> {
+interface KeyIdentity {
+  /** What the catalogue says this key carries, or undefined if it could not say. */
+  readonly role: string | undefined;
+  /**
+   * 043's tenants, or undefined if the catalogue could not say.
+   *
+   * `undefined` and `[]` are deliberately different: the first means "unknown,
+   * show everything and let the database refuse", the second means "this key
+   * really does carry no tenant beyond delivery". Collapsing them would turn an
+   * unreachable catalogue into a session missing half its tools.
+   */
+  readonly tenants: readonly string[] | undefined;
+}
+
+async function identifyKey(apiUrl: string, apiKey: string, agentId: string): Promise<KeyIdentity> {
   const timeout = AbortSignal.timeout(5_000);
   try {
     const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/v1/whoami`, {
@@ -115,25 +130,34 @@ async function actualRole(apiUrl: string, apiKey: string, agentId: string): Prom
           : `whoami returned ${response.status}; offering every tool and letting the ` +
               "catalogue decide.",
       );
-      return undefined;
+      return { role: undefined, tenants: undefined };
     }
     const body = (await response.json()) as {
       pando_role?: unknown;
       writes?: { product_key?: unknown };
       key?: { expires_in_days?: unknown };
+      tenants?: unknown;
     };
     const scope = body.writes?.product_key;
     if (typeof scope === "string") note(`this key writes product "${scope}" and no other`);
     const expiry = expiryWarning(body.key?.expires_in_days);
     if (expiry !== undefined) note(expiry);
-    return typeof body.pando_role === "string" ? body.pando_role : undefined;
+    return {
+      role: typeof body.pando_role === "string" ? body.pando_role : undefined,
+      // A catalogue predating 043 has no `tenants` field at all, and that is
+      // not the same as a key with none — so an absent field stays undefined
+      // and nothing is narrowed.
+      tenants: Array.isArray(body.tenants)
+        ? body.tenants.filter((t): t is string => typeof t === "string")
+        : undefined,
+    };
   } catch (error) {
     note(
       `could not reach ${apiUrl} to identify this key ` +
         `(${error instanceof Error ? error.message : String(error)}); ` +
         "offering every tool and letting the catalogue decide.",
     );
-    return undefined;
+    return { role: undefined, tenants: undefined };
   }
 }
 
@@ -191,10 +215,13 @@ async function startConfigured({ config, warnings }: LoadResult): Promise<void> 
     baseUrl: config.apiUrl,
     apiKey: config.apiKey,
     agentId: config.agentId,
+    // So a read still answers when the catalogue cannot be reached. See
+    // cache.ts for why only a dropped connection falls back and a 403 does not.
+    cacheHome: workspaceRoot(),
   });
 
-  const role = await actualRole(config.apiUrl, config.apiKey, config.agentId);
-  const surface = resolveSurface(role, config.declaredRole);
+  const identity = await identifyKey(config.apiUrl, config.apiKey, config.agentId);
+  const surface = resolveSurface(identity.role, config.declaredRole, identity.tenants);
 
   const server = createMcpServer(client, {
     toolNames: surface.names,
@@ -434,13 +461,14 @@ async function startPinned(pinned: Role): Promise<void> {
     baseUrl: grant.config.apiUrl,
     apiKey: registered.apiKey,
     agentId: registered.agentId,
+    cacheHome: workspaceRoot(),
   });
 
   // No whoami round trip: the registration response already said which role the
   // key carries, and it came from the same statement that minted it. The
   // intersection is still taken, so a catalogue that somehow answered with a
   // different role than was asked for narrows rather than widens.
-  const surface = resolveSurface(registered.pandoRole, pinned);
+  const surface = resolveSurface(registered.pandoRole, pinned, registered.tenants);
 
   const server = createMcpServer(client, {
     toolNames: surface.names,

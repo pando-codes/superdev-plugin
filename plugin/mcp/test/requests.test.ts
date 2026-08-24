@@ -8,6 +8,9 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { call, startStub, TEST_AGENT, TEST_KEY, type StubHarness } from "./harness.ts";
 
 let h: StubHarness;
@@ -395,7 +398,9 @@ describe("the work queue", () => {
     for (const [name, method, suffix, args] of [
       ["catalog_get_work", "GET", "", {}],
       ["catalog_heartbeat_work", "POST", "/heartbeat", {}],
-      ["catalog_push_progress", "POST", "/notes", { kind: "progress", body: "did a thing" }],
+      // catalog_push_progress is deliberately absent: it is local-first and
+      // reaches the catalogue through the journal drain, not through a path
+      // segment. Its request shape is asserted in "progress notes" below.
       ["catalog_finish_work", "PATCH", "", { state: "done", outcome: "built it" }],
     ] as const) {
       reset();
@@ -408,6 +413,58 @@ describe("the work queue", () => {
       ]);
       expect([name, req.body?.work_item_key]).toEqual([name, undefined]);
     }
+  });
+
+  /**
+   * Progress notes take the local-first path, and the boundary between what is
+   * journalled and what is not is the design's load-bearing line — so it is
+   * asserted on the wire rather than trusted.
+   */
+  describe("progress notes", () => {
+    let journalHome: string;
+    let previous: string | undefined;
+
+    beforeAll(() => {
+      // Without this the tool would write a journal into the repository it is
+      // being tested in, which is a real bug in the making and not only a mess.
+      journalHome = mkdtempSync(join(tmpdir(), "superdev-requests-"));
+      previous = process.env.CLAUDE_PROJECT_DIR;
+      process.env.CLAUDE_PROJECT_DIR = journalHome;
+    });
+
+    afterAll(() => {
+      if (previous === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+      else process.env.CLAUDE_PROJECT_DIR = previous;
+      rmSync(journalHome, { recursive: true, force: true });
+    });
+
+    test("a note drains to the product-agnostic endpoint, carrying its work item", async () => {
+      reset();
+      await call(h.client, "catalog_push_progress", {
+        work_item_key: "wi_a1b2c3",
+        kind: "progress",
+        body: "did a thing",
+      });
+      const req = h.only();
+      expect([req.method, req.path]).toEqual(["POST", "/v1/work-notes/drain"]);
+      // The key moves from the path into the record, because one drain may span
+      // several work items.
+      expect(req.body.notes[0]).toMatchObject({ work_item_key: "wi_a1b2c3", kind: "progress" });
+      expect(req.body.notes[0]).toHaveProperty("client_id");
+    });
+
+    test("and the subagent's identity travels with it, not the process's", async () => {
+      reset();
+      await call(h.client, "catalog_push_progress", {
+        work_item_key: "wi_a1b2c3",
+        kind: "handoff",
+        body: "over to you",
+        agent_id: "eng-beta",
+      });
+      // The catalogue forces a note's author from the connection's declared id,
+      // so a drain under the process identity would misattribute the note.
+      expect(h.only().headers["x-pando-agent-id"]).toBe("eng-beta");
+    });
   });
 
   test("filing posts under the product and leaves product_key out of the body", async () => {

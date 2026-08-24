@@ -265,7 +265,7 @@ describe("the committed bundle", () => {
       const stderr = await readUntil(child.stderr as ReadableStream, "tools offered", 15_000);
       child.kill();
       expect(stderr).toContain("connected to http://catalog.invalid");
-      expect(stderr).toContain("32 tools offered");
+      expect(stderr).toContain("38 tools offered");
       expect(stderr).toContain(join(project, ".superdev", "config.json"));
     } finally {
       rmSync(project, { recursive: true, force: true });

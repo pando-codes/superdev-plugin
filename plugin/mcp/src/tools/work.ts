@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { seg } from "../client.ts";
+import { drain } from "../drain.ts";
+import * as journal from "../journal.ts";
+import { workspaceRoot } from "../workspace.ts";
+import { ApiError, seg } from "../client.ts";
 import type { ToolDefinition } from "./types.ts";
 
 /**
@@ -33,6 +36,51 @@ const workItemKey = z
   .string()
   .regex(/^wi_[a-z0-9]{6}$/, "wi_ followed by exactly six lowercase alphanumerics")
   .describe("Work item key, e.g. wi_a1b2c3.");
+
+/**
+ * Wraps the three operations that CANNOT be journalled, so an offline agent is
+ * told the rule rather than handed a transport error.
+ *
+ * Claiming is mutual exclusion; heartbeating and finishing both assert a live
+ * lease. None of them can be deferred to a drain, because two agents claiming
+ * locally and reconciling afterwards produces a conflict resolvable only by
+ * discarding work somebody already did — which is why the claim is
+ * `for update skip locked` in Postgres and not a client concern.
+ *
+ * An `ApiError` is a real answer and passes straight through: "this item is
+ * already held" is information, and dressing it up as an outage would be a lie.
+ * Only a request that never reached anything is rewritten, and the rewrite says
+ * what an agent can still do — because "keep working the item you hold and keep
+ * journalling progress" is the correct behaviour here and is not obvious.
+ */
+async function serverOnly<T>(what: string, run: () => Promise<T>): Promise<T | ServerOnlyOffline> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    return {
+      unavailable: true,
+      operation: what,
+      reason: error instanceof Error ? error.message : String(error),
+      explanation:
+        `${what} cannot be done offline and cannot be journalled: it is the queue's mutual ` +
+        "exclusion, and two agents resolving that after the fact would mean discarding work " +
+        "somebody already did.",
+      what_you_can_still_do:
+        "Keep working the item you already hold, and keep calling catalog_push_progress — " +
+        "notes are append-only and journal locally, so they will land when the catalogue is " +
+        "reachable again, even if this lease has expired by then. Do not take new work.",
+    };
+  }
+}
+
+interface ServerOnlyOffline {
+  readonly unavailable: true;
+  readonly operation: string;
+  readonly reason: string;
+  readonly explanation: string;
+  readonly what_you_can_still_do: string;
+}
 
 export const workTools: ToolDefinition[] = [
   {
@@ -83,7 +131,10 @@ export const workTools: ToolDefinition[] = [
     },
     handler: async (client, args) => {
       const { agent_id, ...payload } = args;
-      return (await client.post("/v1/work-items/claim", payload, agent_id)).body;
+      return serverOnly(
+        "Claiming work",
+        async () => (await client.post("/v1/work-items/claim", payload, agent_id)).body,
+      );
     },
   },
   {
@@ -163,9 +214,12 @@ export const workTools: ToolDefinition[] = [
     },
     handler: async (client, args) => {
       const { work_item_key, agent_id, ...payload } = args;
-      return (
-        await client.post(`/v1/work-items/${seg(work_item_key)}/heartbeat`, payload, agent_id)
-      ).body;
+      return serverOnly(
+        "Heartbeating a lease",
+        async () =>
+          (await client.post(`/v1/work-items/${seg(work_item_key)}/heartbeat`, payload, agent_id))
+            .body,
+      );
     },
   },
   {
@@ -192,9 +246,30 @@ export const workTools: ToolDefinition[] = [
     },
     handler: async (client, args) => {
       const { work_item_key, agent_id, ...payload } = args;
-      return (
-        await client.post(`/v1/work-items/${seg(work_item_key)}/notes`, payload, agent_id)
-      ).body;
+      // Local-first, like a message and a decision and for the same reason: a
+      // note is an append, two agents appending never conflict, and 029's policy
+      // has never required a lease to write one. An agent that loses its network
+      // mid-task keeps recording what it did, and the notes land later — even if
+      // the lease it was working under expired in the meantime, which is
+      // deliberate. Losing the record of real work is worse than a note on an
+      // item that has moved on.
+      const home = workspaceRoot();
+      const record = await journal.append(
+        home,
+        "work-progress",
+        // No product in the path for this stream; the note names its work item
+        // and 029's policy resolves the product from it.
+        "",
+        { ...payload, work_item_key },
+        agent_id,
+      );
+      const outcome = await drain(client, home, "work-progress");
+      return {
+        journalled: true,
+        client_id: record.client_id,
+        delivered: outcome.still_pending === 0,
+        drain: outcome,
+      };
     },
   },
   {
@@ -233,8 +308,11 @@ export const workTools: ToolDefinition[] = [
     },
     handler: async (client, args) => {
       const { work_item_key, agent_id, ...payload } = args;
-      return (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload, agent_id))
-        .body;
+      return serverOnly(
+        "Finishing work",
+        async () =>
+          (await client.patch(`/v1/work-items/${seg(work_item_key)}`, payload, agent_id)).body,
+      );
     },
   },
   {

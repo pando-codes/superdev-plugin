@@ -58,6 +58,35 @@ const HOLD_WORK = [
   "catalog_finish_work",
 ] as const;
 
+/**
+ * The tools each non-delivery tenant contributes, and who gets them.
+ *
+ * 043 makes tenant enablement a property of the CREDENTIAL, enforced by policy.
+ * What happens here is the same kind of narrowing this file already does for
+ * roles: a courtesy that keeps an agent from spending a turn on a tool that
+ * would be refused. It is not the boundary, and a modified copy of this file
+ * changes what an agent SEES and nothing about what it can DO.
+ *
+ * Correspondence goes to every role, because 041 lets any role in scope send
+ * and the useful messages are usually cross-role. Decisions split: everyone
+ * reads them, because a ruling binds the agents who did not make it, and only a
+ * Head records one.
+ */
+const TENANT_TOOLS: Record<string, readonly string[]> = {
+  correspondence: ["catalog_send_message", "catalog_read_messages"],
+  decision: ["catalog_read_decisions"],
+};
+
+/** Recording a ruling, which 042's policy allows to a Head alone. */
+const RULE = ["catalog_record_decision"] as const;
+
+/**
+ * Local journal tools. Not gated by any single tenant, because they are about
+ * the FILE rather than about either tenant's rows — but pointless when neither
+ * tenant is enabled, so they appear only when at least one is.
+ */
+const JOURNAL = ["catalog_drain_journal", "catalog_journal_status"] as const;
+
 /** Filing and ordering the backlog. Deliberately not the doer's. */
 const STEWARD_WORK = ["catalog_file_work", "catalog_steward_work"] as const;
 
@@ -100,9 +129,19 @@ const WRITES_BY_ROLE: Record<Role, readonly string[]> = {
 
 const ALL_TOOL_NAMES = new Set(allTools.map((t) => t.name));
 
-/** Every tool a role may successfully call. */
+/** Every tenant tool a role could hold, before enablement narrows it. */
+function tenantToolsForRole(role: Role): string[] {
+  const names = [...TENANT_TOOLS.correspondence!, ...TENANT_TOOLS.decision!, ...JOURNAL];
+  return role === "head-of-engineering" ? [...names, ...RULE] : names;
+}
+
+/** Every tool a role may successfully call, if every tenant were enabled. */
 export function toolsForRole(role: Role): Set<string> {
-  const names = new Set<string>([...READS, ...WRITES_BY_ROLE[role]]);
+  const names = new Set<string>([
+    ...READS,
+    ...WRITES_BY_ROLE[role],
+    ...tenantToolsForRole(role),
+  ]);
   // A name that no longer exists would silently shrink a role's surface, and a
   // role missing one tool is far harder to notice than one missing all of them.
   for (const name of names) {
@@ -125,9 +164,48 @@ export function toolsForRole(role: Role): Set<string> {
  * make this file a way to ask for authority, which is exactly what it must not
  * be.
  */
+/**
+ * Removes the tools for tenants this credential does not carry.
+ *
+ * `undefined` means the catalogue's answer was unavailable, and that fails
+ * OPEN for the same reason an unknown role does: this narrowing sits over a
+ * boundary the database already holds, so being wrong costs a refusal an agent
+ * can read, while failing closed would strand a session because a network call
+ * timed out.
+ *
+ * The database does the opposite and fails CLOSED — an undeclared
+ * `pando.tenants` enables nothing. The two directions are correct together:
+ * the menu guesses generously, the policy refuses precisely.
+ */
+function narrowToTenants(
+  names: Set<string>,
+  tenants: readonly string[] | undefined,
+): { names: Set<string>; note: string | undefined } {
+  if (tenants === undefined) return { names, note: undefined };
+
+  const enabled = new Set(tenants);
+  const gated = new Set<string>();
+  for (const [tenant, tools] of Object.entries(TENANT_TOOLS)) {
+    if (!enabled.has(tenant)) for (const tool of tools) gated.add(tool);
+  }
+  if (!enabled.has("decision")) for (const tool of RULE) gated.add(tool);
+  // The journal tools serve both tenants, so they go only when BOTH are absent.
+  if (!enabled.has("correspondence") && !enabled.has("decision")) {
+    for (const tool of JOURNAL) gated.add(tool);
+  }
+
+  const kept = new Set([...names].filter((n) => !gated.has(n)));
+  const missing = ["correspondence", "decision"].filter((t) => !enabled.has(t));
+  return {
+    names: kept,
+    note: missing.length === 0 ? undefined : `without ${missing.join(" and ")}`,
+  };
+}
+
 export function resolveSurface(
   actualRole: string | undefined,
   declaredRole: Role | undefined,
+  tenants?: readonly string[],
 ): { names: Set<string>; basis: string } {
   if (actualRole === undefined || !(ROLES as readonly string[]).includes(actualRole)) {
     // Unknown role — whoami was unreachable, or the catalogue grew a role this
@@ -141,21 +219,36 @@ export function resolveSurface(
     const names = new Set(ALL_TOOL_NAMES);
     if (declaredRole !== undefined) {
       const narrowed = toolsForRole(declaredRole);
-      return {
-        names: new Set([...names].filter((n) => narrowed.has(n))),
-        basis: `declared role "${declaredRole}" (the catalogue's answer was unavailable)`,
-      };
+      return withTenants(
+        new Set([...names].filter((n) => narrowed.has(n))),
+        `declared role "${declaredRole}" (the catalogue's answer was unavailable)`,
+        tenants,
+      );
     }
-    return { names, basis: "every tool (the catalogue's answer was unavailable)" };
+    return withTenants(names, "every tool (the catalogue's answer was unavailable)", tenants);
   }
 
   const actual = toolsForRole(actualRole as Role);
   if (declaredRole === undefined || declaredRole === actualRole) {
-    return { names: actual, basis: `role "${actualRole}"` };
+    return withTenants(actual, `role "${actualRole}"`, tenants);
   }
   const declared = toolsForRole(declaredRole);
+  return withTenants(
+    new Set([...actual].filter((n) => declared.has(n))),
+    `role "${actualRole}", narrowed to what "${declaredRole}" needs`,
+    tenants,
+  );
+}
+
+/** Applies the tenant narrowing and folds it into the basis sentence. */
+function withTenants(
+  names: Set<string>,
+  basis: string,
+  tenants: readonly string[] | undefined,
+): { names: Set<string>; basis: string } {
+  const narrowed = narrowToTenants(names, tenants);
   return {
-    names: new Set([...actual].filter((n) => declared.has(n))),
-    basis: `role "${actualRole}", narrowed to what "${declaredRole}" needs`,
+    names: narrowed.names,
+    basis: narrowed.note === undefined ? basis : `${basis}, ${narrowed.note}`,
   };
 }
