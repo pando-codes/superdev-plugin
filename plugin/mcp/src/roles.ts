@@ -33,6 +33,16 @@ import { allTools } from "./tools/index.ts";
  * the item they hold, which is the whole of the table below.
  */
 
+/**
+ * Tools every server offers, whatever it holds and whether it holds anything.
+ *
+ * Separate from READS because these are not catalogue reads — they ask nothing
+ * of the database and are not narrowed by anything it decides. A diagnostic
+ * that disappeared from the menu when a role narrowed, or when a credential was
+ * missing, would be absent from every session that needed it.
+ */
+const ALWAYS = ["catalog_doctor"] as const;
+
 /** Reads are open to every provisioned role: reading is not an assertion (012). */
 const READS = [
   "catalog_whoami",
@@ -138,6 +148,7 @@ function tenantToolsForRole(role: Role): string[] {
 /** Every tool a role may successfully call, if every tenant were enabled. */
 export function toolsForRole(role: Role): Set<string> {
   const names = new Set<string>([
+    ...ALWAYS,
     ...READS,
     ...WRITES_BY_ROLE[role],
     ...tenantToolsForRole(role),

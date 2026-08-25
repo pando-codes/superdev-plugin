@@ -1,7 +1,7 @@
 {
   "name": "superdev",
   "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the superdev catalogue and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "author": {
     "name": "Alex",
     "email": "alex@pando.codes"

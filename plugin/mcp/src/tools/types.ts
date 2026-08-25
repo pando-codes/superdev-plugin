@@ -21,5 +21,16 @@ export interface ToolDefinition {
     readonly destructiveHint?: boolean;
     readonly idempotentHint?: boolean;
   };
+  /**
+   * Whether this tool still runs on a server that never got a credential.
+   *
+   * Almost nothing may set this. The unconfigured short-circuit in server.ts is
+   * what guarantees an inert server makes NO request — the property the whole
+   * unconfigured path rests on — so an exemption is only safe for a tool that
+   * touches neither the client nor the network. `catalog_doctor` is the case it
+   * exists for, and it is the case that most needs it: a diagnostic that
+   * refuses to run until the thing it diagnoses is fixed is not a diagnostic.
+   */
+  readonly worksUnconfigured?: boolean;
   readonly handler: (client: CatalogClient, args: any) => Promise<unknown>;
 }

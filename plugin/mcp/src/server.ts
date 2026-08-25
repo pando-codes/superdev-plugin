@@ -123,7 +123,11 @@ export function createMcpServer(client: CatalogClient, options: ServerOptions = 
       async (args: any) => {
         // Before the client is touched at all: an unconfigured server never
         // makes a request, so there is no half-configured call to go wrong.
-        if (options.unconfigured !== undefined) {
+        //
+        // The one exemption is a tool that reaches neither — see
+        // ToolDefinition.worksUnconfigured. It cannot weaken the guarantee
+        // above, because a tool that never had a client to use cannot use one.
+        if (options.unconfigured !== undefined && tool.worksUnconfigured !== true) {
           return {
             content: [{ type: "text" as const, text: options.unconfigured }],
             isError: true as const,

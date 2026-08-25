@@ -40,6 +40,9 @@ const READS = [
   // Touches the local journal and no network, which makes it a read of this
   // machine's state — it changes nothing anywhere.
   "catalog_journal_status",
+  // Reads this machine's files and environment and nothing else. The only tool
+  // that answers on a server holding no credential at all.
+  "catalog_doctor",
 ];
 
 /** Authority varies per tool; the database decides, not this list. */

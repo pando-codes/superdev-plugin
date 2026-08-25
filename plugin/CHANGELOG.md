@@ -11,6 +11,52 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.9.0 — 2026-08-25
+
+**Minor**, by `docs/guides/releasing.md`'s rule: a new tool. `catalog_doctor` is added and no
+existing tool's name, arguments, or contract changed.
+
+**Requires migrations 046-047** (live in production since 2026-08-25) **and the API deployed
+after them.** The grant-expiry warning is silent against an older API rather than wrong — it
+warns about nothing when the server sent nothing — so this plugin is safe to install before that
+deploy lands. `catalog_doctor` needs no API at all and works with no credential.
+
+### Added
+
+- **`catalog_doctor`** — the one tool that works when nothing else does. It reports which files
+  and environment variables this machine holds, which credentials are in them (prefixes only),
+  and what each of the four servers would actually run on. It makes **no network call**: the
+  states most worth diagnosing include a catalogue that cannot be reached, and a diagnostic that
+  hangs in exactly that case is not one. Call it first whenever a catalog tool answers with setup
+  instructions, returns 401, or is missing from the session.
+- **A warning when the machine's orchestrator grant is about to expire**, for the last thirty
+  days. Longer than the fourteen a key gets, because a key stops one agent and a grant stops
+  every agent on the machine at once — and grants minted in the same week expire in the same
+  week, so a team onboarded together stops together.
+
+### Changed
+
+- **The unpinned `catalog` server now uses your orchestrator grant** when no `api_key` is
+  configured, registering as the role `.superdev/config.json` declares and defaulting to
+  `product-manager`. If you have a grant and no `config.json` — which is exactly what
+  `mint-grant` leaves behind — that server used to be the only one that did not work.
+- **A repository with no product binding now offers `catalog_bind_repository` from the unpinned
+  server too**, so the main thread, where `superdev:init` actually runs, can bind a checkout.
+- **An unconfigured server narrows its tool menu by a `role` in `config.json`**, not only by
+  `SUPERDEV_ROLE`.
+- **`superdev:connect` opens with `catalog_doctor`.**
+- The three shipped agents list `catalog_doctor` in their `tools:` frontmatter.
+
+### Fixed
+
+- **The "no api_key configured" message no longer sends you to mint a credential you already
+  have.** It now says whether an orchestrator grant is present, and a failed registration says
+  the grant was *found and used* rather than implying a key is missing. These were two different
+  problems with two different fixes, and the message pointed at neither.
+- **A grant that is present but unusable no longer silently falls back** to a `keys.<role>` from
+  `config.json`. Only a machine with no grant at all does that. Before, a malformed
+  `orchestrator.json` would quietly run your agents on a different credential.
+
 ## 0.6.0 — 2026-08-21
 
 ### Added

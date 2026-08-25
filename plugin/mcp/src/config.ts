@@ -280,25 +280,48 @@ export function userConfigPath(env: NodeJS.ProcessEnv): string {
   return join(home, ".superdev", "config.json");
 }
 
+/**
+ * Where the machine's orchestrator grant lives. User scope only — grant.ts's
+ * header explains at length why a repository must never be able to supply one.
+ *
+ * DEFINED HERE, of all places, so that loadConfig can say whether one is
+ * present. That matters more than the tidiness of keeping it beside its own
+ * loader: the failure this module reports most often is "no api_key", and the
+ * single most misleading version of it is the one printed on a machine that is
+ * holding a perfectly good grant three lines away in the same directory.
+ * grant.ts re-exports it, so there is still one definition.
+ */
+export function grantConfigPath(env: NodeJS.ProcessEnv): string {
+  const home = str(env.SUPERDEV_HOME) ?? homedir();
+  return join(home, ".superdev", "orchestrator.json");
+}
+
 export interface LoadResult {
   readonly config: SuperdevConfig;
   readonly warnings: readonly string[];
 }
 
+export interface ConfigLayers {
+  /** The two files' contents, project overwriting user, field by field. */
+  readonly merged: RawConfig;
+  readonly sources: readonly string[];
+  readonly warnings: readonly string[];
+}
+
 /**
- * Resolves configuration, or explains precisely what is missing.
+ * Reads the two config files and merges them, without deciding anything.
  *
- * `warnings` are things worth saying on stderr that must not stop the server:
- * an insecure file mode, a declared role with no key of its own. Anything that
- * makes the server unable to function throws instead.
+ * Split out of loadConfig so that the ROLE can be resolved even when the load
+ * as a whole fails. That is not a hypothetical: a machine holding an
+ * orchestrator grant and no `config.json` at all still has a role to register
+ * as — declared in either file, or defaulted — and loadConfig throws before it
+ * can be asked. Two readers of the same layers must not disagree about
+ * precedence, so there is one function that does the merging and both use it.
  */
-export function loadConfig(
+export function readConfigLayers(
   rawEnv: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
-): LoadResult {
-  // Scrubbed here rather than at the call sites, so that every path into this
-  // function is covered by construction — including the one in stdio.ts that
-  // builds its own environment object out of process.env.
+): ConfigLayers {
   const env = withoutUnexpandedPlaceholders(rawEnv);
   const warnings: string[] = [];
   const sources: string[] = [];
@@ -318,16 +341,87 @@ export function loadConfig(
     layers.push(found.raw);
   }
 
-  const merged: RawConfig = Object.assign({}, ...layers);
+  return { merged: Object.assign({}, ...layers), sources, warnings };
+}
 
-  const declaredRoleRaw = str(env.SUPERDEV_ROLE) ?? str(merged.role);
-  if (declaredRoleRaw !== undefined && !isRole(declaredRoleRaw)) {
+/**
+ * The role this machine says it works as, or undefined when it says nothing.
+ *
+ * `SUPERDEV_ROLE` then the merged `role` field — the same precedence loadConfig
+ * uses, because it is the same question. Deliberately NOT SUPERDEV_PINNED_ROLE:
+ * that one is set by plugin.json to a literal and means something stronger (see
+ * grant.ts's pinnedRoleOf).
+ */
+export function declaredRoleOf(
+  rawEnv: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd(),
+): Role | undefined {
+  const env = withoutUnexpandedPlaceholders(rawEnv);
+  return roleFrom(str(env.SUPERDEV_ROLE) ?? str(readConfigLayers(env, cwd).merged.role));
+}
+
+/** Validates a role name, or explains that it is not one. */
+function roleFrom(raw: string | undefined): Role | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRole(raw)) {
     throw new ConfigError(
-      `"${declaredRoleRaw}" is not a role this catalogue defines. ` +
-        `Known roles: ${ROLES.join(", ")}.`,
+      `"${raw}" is not a role this catalogue defines. Known roles: ${ROLES.join(", ")}.`,
     );
   }
-  const declaredRole = declaredRoleRaw as Role | undefined;
+  return raw;
+}
+
+/**
+ * What the "no key" message says about the grant sitting next to it.
+ *
+ * WHY THIS PARAGRAPH IS WORTH THE COMPLICATION
+ *
+ * A machine can hold a live orchestrator grant and no `config.json` at all —
+ * that is the ordinary state after `mint-grant`, because a grant is the only
+ * credential a person is meant to install. Before this, the message printed in
+ * that state opened with "no api_key configured" and closed by sending the
+ * reader to the portal to mint one, while the credential that would have worked
+ * sat unmentioned in the same directory. The reader then has two plausible
+ * theories and no way to tell them apart, and the likelier one is wrong.
+ *
+ * Presence is all that is checked. Whether the grant is VALID needs a network
+ * call, and this function is composing an error message — a message that
+ * blocked on HTTP would be a message that sometimes never arrives.
+ */
+function grantSituation(env: NodeJS.ProcessEnv): string {
+  const path = grantConfigPath(env);
+  return existsSync(path)
+    ? `A GRANT IS PRESENT at ${path}. It is a separate credential, resolved separately,\n` +
+        `and reaching this message means it was not usable here — it did not merely go\n` +
+        `unnoticed. Whatever is wrong with it is a different problem from the one above,\n` +
+        `and minting a key will not touch it.\n\n`
+    : `No orchestrator grant was found either:\n` +
+        `  ${path}\n` +
+        `That is the OTHER way to credential this machine, and usually the better one:\n` +
+        `one file, from which every agent on the machine gets its own role-scoped key.\n\n`;
+}
+
+/**
+ * Resolves configuration, or explains precisely what is missing.
+ *
+ * `warnings` are things worth saying on stderr that must not stop the server:
+ * an insecure file mode, a declared role with no key of its own. Anything that
+ * makes the server unable to function throws instead.
+ */
+export function loadConfig(
+  rawEnv: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd(),
+): LoadResult {
+  // Scrubbed here rather than at the call sites, so that every path into this
+  // function is covered by construction — including the one in stdio.ts that
+  // builds its own environment object out of process.env.
+  const env = withoutUnexpandedPlaceholders(rawEnv);
+  const layers = readConfigLayers(env, cwd);
+  const warnings: string[] = [...layers.warnings];
+  const sources = layers.sources;
+  const merged = layers.merged;
+
+  const declaredRole = roleFrom(str(env.SUPERDEV_ROLE) ?? str(merged.role));
 
   const urlFromEnv = readEnv(env, "SUPERDEV_API_URL");
   if (urlFromEnv.deprecated) {
@@ -373,6 +467,7 @@ export function loadConfig(
         `    "role": "engineer",\n` +
         `    "keys": { "engineer": "pcat_live_...", "product-manager": "pcat_live_..." }\n` +
         `  }\n\n` +
+        grantSituation(env) +
         `If you have an account on the hosted catalogue, issue yourself a key:\n` +
         `  ${PORTAL_URL}\n\n` +
         `The catalogue is invite-only while it is in beta. If you do not have an\n` +

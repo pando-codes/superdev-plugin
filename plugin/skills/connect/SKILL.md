@@ -15,8 +15,23 @@ repository that should be working as a different role than your laptop does.
 
 ## Step 0: Find out what is actually wrong
 
-Call `catalog_whoami` and read the answer literally. Four outcomes, and they need four different
-things:
+**Call `catalog_doctor` first.** It is the only tool that works when nothing else does — it reads
+this machine's files and environment, makes no network call, and prints which credential each of
+the four servers would run on. Show its output to the user; every fix it names is a file on their
+machine and only they can apply it.
+
+It answers the local half. If it reports no problems, the remaining question is whether the
+catalogue *accepts* the credential, and that is `catalog_whoami`.
+
+Two states it exists to tell apart, which used to look identical:
+
+- **A grant is present and only the unpinned `catalog` server is unconfigured.** Nothing is
+  wrong with the credential. Declare a `role` for the repository, or accept the
+  `product-manager` default.
+- **No credential at all.** This is the fresh-install case, and the only one where Step 1 applies.
+
+Then call `catalog_whoami` and read the answer literally. Four outcomes, and they need four
+different things:
 
 | What you get back | What it means | Where to go |
 |---|---|---|
@@ -24,7 +39,7 @@ things:
 | Setup instructions naming three paths | No key was found anywhere. This is the fresh-install case | Step 1 |
 | `401` / "the catalogue rejected this API key" | A key exists but the catalog will not accept it — revoked, expired, or from another environment | Step 1, with a replacement key |
 | The `catalog_*` tools are not in the session at all | The MCP server is not running, which is **not** a key problem | See "When there are no tools at all" |
-| Instructions naming an **orchestrator grant** and `mint-grant` | You called a role-pinned tool (`…catalog-engineer__…`) on a machine with no grant | Step 1G |
+| Instructions naming an **orchestrator grant** | This machine has no grant. It is what most setups want — go to Step 1G rather than issuing keys | Step 1G |
 
 When the answer is setup instructions, **show them to the user verbatim before doing anything
 else**. They name the exact three paths that were consulted on *this* machine, which is more
@@ -161,9 +176,18 @@ An unconfigured server is *not* this case: it starts, registers all of its tools
 every call with instructions. Tools that are present and complaining are a Step 1 problem; tools
 that are absent are this one.
 
-## Step 1G: The machine grant, when the tools are the role-pinned ones
+## Step 1G: The machine grant — the credential most setups actually want
 
-There are two kinds of credential now, and the fix depends on which one is missing.
+There are two kinds of credential, and for a person's computer it is almost always this one.
+
+A grant is **one file per machine**. Every agent on it derives its own short-lived, role-bound key
+at startup, so a builder cannot act as a planner and two agents cannot take each other's work.
+Three separate keys on one machine give every agent in a session the same authority, which is the
+arrangement grants exist to replace — so reach for this before Step 1 unless the caller genuinely
+does one job forever, like a CI runner.
+
+It also credentials the unpinned `catalog` server, not only the role-pinned ones: with a grant and
+no `config.json`, all four servers work.
 
 | | An **API key** | An **orchestrator grant** |
 |---|---|---|
@@ -171,7 +195,7 @@ There are two kinds of credential now, and the fix depends on which one is missi
 | Carries | one role, for as long as it lives | no role at all; it *mints* keys |
 | Can read the catalogue | yes | **no** — presented as a key it is simply not one |
 | Lives at | `~/.superdev/config.json` or a project's | `~/.superdev/orchestrator.json`, **user scope only** |
-| Who has one | anyone with a key from the portal | a machine that runs several agents at once |
+| Who has one | a caller that only ever does one job | **anyone setting up a computer** — this is the one to want |
 
 The grant is what makes an agent's role something it is **given**. One per machine; each agent
 registers with it at startup and gets its own short-lived key, bound to one role and one identity.
@@ -181,7 +205,20 @@ and the agent's `tools:` frontmatter names one server.
 **There is deliberately no project scope for a grant.** A repository that could carry one would be
 a repository that hands your machine the ability to manufacture credentials by being cloned.
 
-Minting is an operator action, like a key's:
+**Issue one from the portal**, under **Machines**. Sign in by emailed link, name the machine,
+leave all three roles ticked, and the grant is shown once:
+
+```
+https://superdev-portal.vercel.app
+```
+
+The roles are the **ceiling**, enforced by the database: a grant that cannot mint
+`agent_product_manager` cannot be talked into it by anything an agent says. All three is the right
+answer for a person's machine — a missing role shows up as one server that cannot start while the
+other two work, which is a confusing state to reach by unticking a box. Narrow it only for a
+machine that genuinely does one job.
+
+If you run your **own** catalogue, the CLI still exists and needs the owner credential:
 
 ```sh
 cd apps/backend
@@ -189,15 +226,18 @@ DATABASE_URL=… bun run mint-grant --org <account> --label "<this machine>" \
     --roles agent_engineer,agent_quality_assurance,agent_product_manager
 ```
 
-`--roles` is the **ceiling**, has no default, and is the whole point: a grant that cannot mint
-`agent_product_manager` cannot be talked into it by anything an agent says. Name only the roles
-this machine's agents are supposed to become.
-
-Then, at `~/.superdev/orchestrator.json`, mode 0600:
+Either way it goes at `~/.superdev/orchestrator.json`, mode 0600:
 
 ```json
 { "api_url": "https://pando-catalog-api.fly.dev", "grant": "pcat_live_…" }
 ```
+
+Never ask the user to paste the grant into the conversation. Tell them where the file goes and let
+them write it, or write it for them from a value they place — a credential in a transcript has to
+be treated as compromised, and a grant *mints* credentials.
+
+Then **call `catalog_doctor` in a fresh session** to confirm all four servers resolve. The plugin
+reads its configuration once at startup, so the session has to be restarted first.
 
 The repository also needs `.superdev/product.json` (superdev:init writes it) — registration names
 a product, and the plugin refuses to guess one from the directory name.

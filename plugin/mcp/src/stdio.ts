@@ -52,13 +52,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CatalogClient } from "./client.ts";
 import {
   ConfigError,
-  isRole,
+  declaredRoleOf,
   loadConfig,
   withoutUnexpandedPlaceholders,
   type LoadResult,
   type Role,
 } from "./config.ts";
 import {
+  GrantMissingError,
   loadGrant,
   pinnedRoleOf,
   ProductBindingMissingError,
@@ -188,6 +189,37 @@ const EXPIRY_WARNING_DAYS = 14;
  * Anything else non-numeric — an older API with no `key` block at all — is also
  * silence, because a client must not warn about a field the server never sent.
  */
+/**
+ * 046. How much warning a GRANT earns, and why it is a longer fuse than a key's.
+ *
+ * Thirty days rather than fourteen. A key is replaced by whoever holds the
+ * catalogue's owner credential and the holder can ask for one the same day; a
+ * grant is the thing that credentials the entire machine, its replacement has to
+ * be minted, delivered, and installed, and when it lapses every agent here stops
+ * simultaneously with a 401 that cannot say why. The cohort problem makes it
+ * worse: grants minted in the same week expire in the same week, so a team
+ * onboarded together stops together.
+ *
+ * Said on every session start once inside the window, deliberately. There is no
+ * other channel — nothing in this system emails anyone — and the alternative to
+ * repeating it is saying it once, months before it matters, into a log.
+ */
+const GRANT_EXPIRY_WARNING_DAYS = 30;
+
+export function grantExpiryWarning(daysRaw: number | undefined): string | undefined {
+  if (daysRaw === undefined) return undefined;
+  const days = Math.round(daysRaw);
+  if (days > GRANT_EXPIRY_WARNING_DAYS) return undefined;
+  return days <= 0
+    ? "this machine's ORCHESTRATOR GRANT expires TODAY. When it lapses, every agent on " +
+        "this machine stops at once — not just this one — and the 401 they get will not " +
+        "say why. Mint a replacement now."
+    : `this machine's ORCHESTRATOR GRANT expires in ${days} day${days === 1 ? "" : "s"}. ` +
+        "It is the credential every agent here derives its key from, so all of them stop " +
+        "together when it lapses. Replacing it needs whoever holds the catalogue's owner " +
+        "credential, so start now rather than on the day.";
+}
+
 export function expiryWarning(daysRaw: unknown): string | undefined {
   // Returns the sentence rather than printing it, so the decision of WHAT to
   // say is testable without capturing a stream. The caller does the printing.
@@ -265,15 +297,23 @@ async function startUnconfigured(error: ConfigError, pinned?: Role): Promise<voi
   // which is what the agent reading it needs; showing the full surface would
   // invite it to plan around tools this server is never going to offer.
   //
-  // Otherwise SUPERDEV_ROLE still narrows, exactly as it does when the catalogue
-  // is unreachable — it may never widen, and there is nothing to widen here in
-  // any case: this server holds no key. Read straight from the environment
-  // rather than from loadConfig, whose precedence is unchanged and which has
-  // already thrown; an unparseable role is simply not a narrowing.
-  const declared = ENV.SUPERDEV_ROLE?.trim();
+  // Otherwise a DECLARED role still narrows, exactly as it does when the
+  // catalogue is unreachable — it may never widen, and there is nothing to widen
+  // here in any case: this server holds no key. Resolved with declaredRoleOf
+  // rather than by reading SUPERDEV_ROLE directly, so that a `role` in
+  // config.json narrows the menu too: an unconfigured server in a repository
+  // that says "this checkout is the engineer" should show the engineer's menu,
+  // and before this it showed all 30 tools. An unparseable role is simply not a
+  // narrowing, which is why this cannot be allowed to throw.
   const declaredRole: Role | undefined =
     pinned ??
-    (declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined);
+    (() => {
+      try {
+        return declaredRoleOf(ENV);
+      } catch {
+        return undefined;
+      }
+    })();
   const surface = resolveSurface(undefined, declaredRole);
 
   const server = createMcpServer(unusableClient(), {
@@ -403,26 +443,74 @@ async function startBootstrap(missing: ProductBindingMissingError): Promise<void
   note("1 tool offered: catalog_bind_repository");
 }
 
-async function startPinned(pinned: Role): Promise<void> {
+/**
+ * The role an unpinned server registers as when nothing on this machine says.
+ *
+ * `product-manager` because the unpinned `catalog` server is the one the MAIN
+ * THREAD and the hand-driven skills address (see CLAUDE.md), and those skills —
+ * init, brainstorm, plan, recalibrate — exist to author capabilities, features,
+ * stories, and criteria. A default of `engineer` would make the server that
+ * exists for planning the one role that may not plan.
+ *
+ * It is a default, not a decision: `role` in config.json, or SUPERDEV_ROLE,
+ * overrides it, and the grant's own `allowed_db_roles` is the ceiling either
+ * way. A machine whose grant does not carry agent_product_manager gets a 403
+ * naming that, which is the correct answer rather than a workaround to route
+ * around.
+ */
+export const DEFAULT_UNPINNED_ROLE: Role = "product-manager";
+
+interface GrantStart {
+  /**
+   * Whether plugin.json pinned this role, as opposed to a config file
+   * declaring it. Only changes what is SAID — the credential path is identical,
+   * because in both cases the role came from a file on disk rather than from
+   * anything a model emitted.
+   */
+  readonly pinned: boolean;
+  /** What to do when this machine holds no grant at all. */
+  readonly noGrant: (error: GrantMissingError) => Promise<void>;
+}
+
+/**
+ * Registers with the machine's grant and starts on the key it is given.
+ *
+ * THE RULE THIS FUNCTION EXISTS TO KEEP
+ *
+ * Every failure path here ends in startUnconfigured or in `noGrant`, and NONE
+ * of them silently falls back to loadConfig(). A server that could not register
+ * must hold no credential at all rather than whatever key config.json happens
+ * to carry — falling back would mean an agent acting as a role it was not
+ * given, arriving through a network failure nobody would think to test.
+ *
+ * `noGrant` is the single exception and it is narrow by construction: it fires
+ * only for GrantMissingError, which means this machine has no grant to have
+ * been given a role by. A grant that is present and unusable — malformed,
+ * unbound, rejected — never reaches it.
+ */
+async function startFromGrant(role: Role, options: GrantStart): Promise<void> {
   let grant;
   try {
-    grant = loadGrant(pinned);
+    grant = loadGrant(role);
   } catch (error) {
     // 040. A live grant and an unbound repository is the one failure this
     // session can fix by itself, and only on the server whose role creates
-    // products anyway. Checked before the ConfigError branch below, because
-    // this IS a ConfigError and the generic path would swallow it.
-    if (error instanceof ProductBindingMissingError && pinned === "product-manager") {
+    // products anyway. Checked first, because it IS a ConfigError and the
+    // branches below would swallow it.
+    if (error instanceof ProductBindingMissingError && role === "product-manager") {
       await startBootstrap(error);
       return;
     }
+    if (error instanceof GrantMissingError) {
+      await options.noGrant(error);
+      return;
+    }
     if (!(error instanceof ConfigError)) throw error;
-    // No grant on this machine. That is not automatically a dead end: a
-    // configured `keys.<role>` was already the arrangement before grants
-    // existed, and using it here is not an escalation, because the key is
-    // chosen by the ROLE this server is pinned to and never by the agent
-    // calling it. See startPinnedFromConfiguredKey for the line that must hold.
-    await startPinnedFromConfiguredKey(pinned, error);
+    // A grant IS here and cannot be used. Reported as itself rather than routed
+    // to the fallback: the operator installed a grant, and quietly running on
+    // something else instead is how a machine ends up registering as a role
+    // nobody chose.
+    await startUnconfigured(error, options.pinned ? role : undefined);
     return;
   }
 
@@ -438,13 +526,15 @@ async function startPinned(pinned: Role): Promise<void> {
     if (!(error instanceof RegistrationError)) throw error;
     await startUnconfigured(
       new ConfigError(
-        `registering this ${pinned} agent with the catalogue failed: ${error.message}\n\n` +
+        `registering this ${role} agent with the catalogue failed: ${error.message}\n\n` +
+          `The grant at ${grant.config.sources[0] ?? "this machine"} was FOUND and used. ` +
+          `This is not a missing key —\nsetting api_key anywhere will not address it.\n\n` +
           (error.status === 401
             ? "The machine's orchestrator grant was not accepted — it is unknown, revoked, or\n" +
               "expired. Mint a replacement; note that revoking a grant deliberately stops every\n" +
               "key it ever issued, so other agents on this machine will have stopped too.\n\n"
             : error.status === 403
-              ? `This machine's grant exists but may not mint ${pinned} keys, or may not reach\n` +
+              ? `This machine's grant exists but may not mint ${role} keys, or may not reach\n` +
                 `the product "${grant.config.productKey}". Both are decided by the grant itself,\n` +
                 "so the fix is a grant with a wider ceiling — not a change here.\n\n"
               : "") +
@@ -452,7 +542,7 @@ async function startPinned(pinned: Role): Promise<void> {
           "configured for a different role. An agent quietly acting as a role it was not\n" +
           "given is a worse outcome than an agent that cannot act at all.",
       ),
-      pinned,
+      options.pinned ? role : undefined,
     );
     return;
   }
@@ -468,7 +558,7 @@ async function startPinned(pinned: Role): Promise<void> {
   // key carries, and it came from the same statement that minted it. The
   // intersection is still taken, so a catalogue that somehow answered with a
   // different role than was asked for narrows rather than widens.
-  const surface = resolveSurface(registered.pandoRole, pinned, registered.tenants);
+  const surface = resolveSurface(registered.pandoRole, role, registered.tenants);
 
   const server = createMcpServer(client, {
     toolNames: surface.names,
@@ -483,7 +573,62 @@ async function startPinned(pinned: Role): Promise<void> {
     `registered as "${registered.agentId}" for role "${registered.pandoRole}" on product ` +
       `"${grant.config.productKey}" (key ${registered.keyPrefix}, expires ${registered.expiresAt})`,
   );
+  // 046. The one moment the grant's own date is visible to the machine holding
+  // it. Said after the success line rather than before, so it reads as a warning
+  // about the future and not as a reason this startup failed.
+  const grantWarning = grantExpiryWarning(registered.grantExpiresInDays);
+  if (grantWarning !== undefined) note(grantWarning);
   note(`${surface.names.size} tools offered, based on ${surface.basis}`);
+}
+
+/**
+ * A server whose role was pinned by plugin.json.
+ *
+ * Its one difference from the unpinned path is where it goes when the machine
+ * holds no grant: a `keys.<role>` in config.json is an acceptable credential
+ * here, because the ROLE picked it, and that arrangement predates grants.
+ */
+async function startPinned(pinned: Role): Promise<void> {
+  await startFromGrant(pinned, {
+    pinned: true,
+    noGrant: (error) => startPinnedFromConfiguredKey(pinned, error),
+  });
+}
+
+/**
+ * The unpinned `catalog` server, on a machine that has a grant and no api_key.
+ *
+ * WHY THIS PATH WAS MISSING, AND WHAT IT COST
+ *
+ * Until now `main()` consulted the grant ONLY when SUPERDEV_PINNED_ROLE was
+ * set. The result was a machine in a perfectly ordinary state — one
+ * `~/.superdev/orchestrator.json`, no `config.json`, which is exactly what
+ * `mint-grant` leaves behind — where the three role-pinned servers worked and
+ * the unpinned one reported "no api_url and api_key configured". Two credentials
+ * exist, one was never looked at, and the message named the one that was
+ * absent. Every reader of it went and minted a key they did not need.
+ *
+ * WHY THIS IS NOT AN AGENT CHOOSING ITS OWN ROLE
+ *
+ * The role comes from `role` in config.json or SUPERDEV_ROLE, resolved before
+ * any tool is registered — a file on disk and an environment variable, the same
+ * class of thing as the `keys.<role>` selection that has always been allowed
+ * here and as the frontmatter that decides which namespace an agent reaches. No
+ * tool takes a role argument, and none is added. The ceiling stays where 039 put
+ * it: `allowed_db_roles` on the grant, enforced by the database, which is why a
+ * machine whose grant does not carry the requested role gets a 403 rather than a
+ * key.
+ */
+async function startUnpinnedFromGrant(role: Role, absent: ConfigError): Promise<void> {
+  await startFromGrant(role, {
+    pinned: false,
+    // No grant AND no key. The config message is the one that leads somewhere
+    // for this reader — it names the portal — and it now says on its own that no
+    // grant was found either, so nothing is added here.
+    noGrant: async () => {
+      await startUnconfigured(absent);
+    },
+  });
 }
 
 async function main(): Promise<void> {
@@ -510,7 +655,32 @@ async function main(): Promise<void> {
     // Anything that is not a ConfigError is a fault rather than a setup
     // problem, and must still be loud.
     if (!(error instanceof ConfigError)) throw error;
-    await startUnconfigured(error);
+
+    // No key. Before giving up, ask whether this machine holds a GRANT — the
+    // credential a person is actually meant to install. See
+    // startUnpinnedFromGrant for why this is not an agent choosing its role.
+    //
+    // The role is resolved separately from loadConfig, which has already thrown
+    // and cannot be asked. A role that is present but unparseable is reported as
+    // itself: it is a typo in a file, and guessing past it would start a server
+    // as something other than what the file asked for.
+    let declared: Role | undefined;
+    try {
+      declared = declaredRoleOf(ENV);
+    } catch (roleError) {
+      if (!(roleError instanceof ConfigError)) throw roleError;
+      await startUnconfigured(roleError);
+      return;
+    }
+    if (declared === undefined) {
+      note(
+        `no role is declared on this machine, so if a grant is used this server will ` +
+          `register as "${DEFAULT_UNPINNED_ROLE}" — the role the planning skills need. ` +
+          `Set "role" in .superdev/config.json to change it.`,
+      );
+    }
+    const role: Role = declared ?? DEFAULT_UNPINNED_ROLE;
+    await startUnpinnedFromGrant(role, error);
     return;
   }
   await startConfigured(loaded);

@@ -51,13 +51,15 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import { hostname } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   ConfigError,
   deprecationWarning,
+  grantConfigPath,
   isRole,
   readEnv,
+  PORTAL_URL,
   ROLES,
   sanitizeAgentId,
   withoutUnexpandedPlaceholders,
@@ -113,13 +115,32 @@ export class ProductBindingMissingError extends ConfigError {
   }
 }
 
+/**
+ * This machine holds no grant at all — as distinct from holding one that cannot
+ * be used.
+ *
+ * WHY THE DIFFERENCE IS WORTH A SUBCLASS
+ *
+ * Because exactly one caller may fall back, and only for this case. A pinned
+ * server with NO grant may use a `keys.<role>` from config.json, because that
+ * arrangement predates grants and the key is still chosen by the role. A pinned
+ * server whose grant is present but malformed, or whose repository is unbound,
+ * must NOT quietly fall back to a different credential — the operator put a
+ * grant on this machine, and silently using something else is how "my agents
+ * are registering as the wrong thing" becomes invisible. Before this class both
+ * cases were one ConfigError and both fell back.
+ */
+export class GrantMissingError extends ConfigError {}
+
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 
-export function grantConfigPath(env: NodeJS.ProcessEnv): string {
-  const home = str(env.SUPERDEV_HOME) ?? homedir();
-  return join(home, ".superdev", "orchestrator.json");
-}
+/**
+ * Re-exported rather than defined here. The definition moved to config.ts so
+ * that loadConfig's "no api_key" message can say whether a grant is present —
+ * see grantSituation there. One definition, two readers.
+ */
+export { grantConfigPath };
 
 /**
  * Where the product binding lives. Shared, committed, and deliberately NOT the
@@ -226,7 +247,7 @@ export function loadGrant(
   const apiUrl = urlFromEnv.value ?? str(found?.raw.api_url);
 
   if (!grant) {
-    throw new ConfigError(
+    throw new GrantMissingError(
       `no orchestrator grant configured, so the ${pinnedRole} server has no way to get ` +
         `a key of its own.\n\n` +
         `A grant is one credential per MACHINE. Every agent on it gets its own short-lived,\n` +
@@ -234,7 +255,11 @@ export function loadGrant(
         `each other's work. Put it at:\n\n` +
         `  ${grantPath}   (mode 0600)\n` +
         `  { "api_url": "https://pando-catalog-api.fly.dev", "grant": "pcat_live_..." }\n\n` +
-        `Mint one with the owner database credential this plugin deliberately does not hold:\n` +
+        `Issue one from the portal, under "Machines" — it takes about thirty seconds and\n` +
+        `needs nothing but the account you already sign in with:\n` +
+        `  ${PORTAL_URL}\n\n` +
+        `If you run your own catalogue, mint one with the owner database credential this\n` +
+        `plugin deliberately does not hold:\n` +
         `  cd apps/backend && DATABASE_URL=... bun run mint-grant \\\n` +
         `      --org <account> --label "<this machine>" \\\n` +
         `      --roles agent_engineer,agent_quality_assurance,agent_product_manager\n\n` +
@@ -324,6 +349,20 @@ export interface RegisteredKey {
   readonly tenants: readonly string[] | undefined;
   readonly agentId: string;
   readonly expiresAt: string;
+  /**
+   * 046. When the GRANT expires — not this key.
+   *
+   * A derived key lives twelve hours and is reminted every session, so its own
+   * expiry is never worth mentioning. The grant that mints it lives ninety days
+   * and is renewed by a person. This is the only moment in the whole system
+   * where its date is visible to the machine holding it, so it is the only
+   * place a warning can be raised while the credential still works.
+   *
+   * Undefined against a catalogue older than 046. That is deliberately not the
+   * same as "expires today": a client must warn about nothing when the server
+   * said nothing.
+   */
+  readonly grantExpiresInDays: number | undefined;
 }
 
 /** A registration the catalogue refused, as distinct from one that failed to reach it. */
@@ -406,6 +445,11 @@ export async function registerAgent(
       : undefined,
     agentId: str(body.agent_id) ?? config.agentId,
     expiresAt: str(body.expires_at) ?? "",
+    grantExpiresInDays:
+      typeof body.grant_expires_in_days === "number" &&
+      Number.isFinite(body.grant_expires_in_days)
+        ? body.grant_expires_in_days
+        : undefined,
   };
 }
 

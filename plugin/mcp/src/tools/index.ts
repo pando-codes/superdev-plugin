@@ -1,3 +1,4 @@
+import { diagnosticTools } from "./diagnostics.ts";
 import { evidenceTools } from "./evidence.ts";
 import { linkTools } from "./links.ts";
 import { readTools } from "./reads.ts";
@@ -9,6 +10,7 @@ import { writeTools } from "./writes.ts";
 export type { ToolDefinition } from "./types.ts";
 
 export const allTools: ToolDefinition[] = [
+  ...diagnosticTools,
   ...readTools,
   ...writeTools,
   ...linkTools,

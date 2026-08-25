@@ -22038,7 +22038,11 @@ function userConfigPath(env) {
   const home = str(env.SUPERDEV_HOME) ?? homedir();
   return join2(home, ".superdev", "config.json");
 }
-function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
+function grantConfigPath(env) {
+  const home = str(env.SUPERDEV_HOME) ?? homedir();
+  return join2(home, ".superdev", "orchestrator.json");
+}
+function readConfigLayers(rawEnv = process.env, cwd = process.cwd()) {
   const env = withoutUnexpandedPlaceholders(rawEnv);
   const warnings = [];
   const sources = [];
@@ -22053,12 +22057,41 @@ function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
     }
     layers.push(found.raw);
   }
-  const merged = Object.assign({}, ...layers);
-  const declaredRoleRaw = str(env.SUPERDEV_ROLE) ?? str(merged.role);
-  if (declaredRoleRaw !== undefined && !isRole(declaredRoleRaw)) {
-    throw new ConfigError(`"${declaredRoleRaw}" is not a role this catalogue defines. ` + `Known roles: ${ROLES.join(", ")}.`);
+  return { merged: Object.assign({}, ...layers), sources, warnings };
+}
+function declaredRoleOf(rawEnv = process.env, cwd = process.cwd()) {
+  const env = withoutUnexpandedPlaceholders(rawEnv);
+  return roleFrom(str(env.SUPERDEV_ROLE) ?? str(readConfigLayers(env, cwd).merged.role));
+}
+function roleFrom(raw) {
+  if (raw === undefined)
+    return;
+  if (!isRole(raw)) {
+    throw new ConfigError(`"${raw}" is not a role this catalogue defines. Known roles: ${ROLES.join(", ")}.`);
   }
-  const declaredRole = declaredRoleRaw;
+  return raw;
+}
+function grantSituation(env) {
+  const path = grantConfigPath(env);
+  return existsSync2(path) ? `A GRANT IS PRESENT at ${path}. It is a separate credential, resolved separately,
+` + `and reaching this message means it was not usable here — it did not merely go
+` + `unnoticed. Whatever is wrong with it is a different problem from the one above,
+` + `and minting a key will not touch it.
+
+` : `No orchestrator grant was found either:
+` + `  ${path}
+` + `That is the OTHER way to credential this machine, and usually the better one:
+` + `one file, from which every agent on the machine gets its own role-scoped key.
+
+`;
+}
+function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
+  const env = withoutUnexpandedPlaceholders(rawEnv);
+  const layers = readConfigLayers(env, cwd);
+  const warnings = [...layers.warnings];
+  const sources = layers.sources;
+  const merged = layers.merged;
+  const declaredRole = roleFrom(str(env.SUPERDEV_ROLE) ?? str(merged.role));
   const urlFromEnv = readEnv(env, "SUPERDEV_API_URL");
   if (urlFromEnv.deprecated) {
     warnings.push(deprecationWarning(urlFromEnv.deprecated, "SUPERDEV_API_URL"));
@@ -22095,7 +22128,7 @@ function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
 ` + `    "keys": { "engineer": "pcat_live_...", "product-manager": "pcat_live_..." }
 ` + `  }
 
-` + `If you have an account on the hosted catalogue, issue yourself a key:
+` + grantSituation(env) + `If you have an account on the hosted catalogue, issue yourself a key:
 ` + `  ${PORTAL_URL}
 
 ` + `The catalogue is invite-only while it is in beta. If you do not have an
@@ -22134,7 +22167,7 @@ function sanitizeAgentId(value) {
 
 // mcp/src/grant.ts
 import { existsSync as existsSync3, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
-import { homedir as homedir2, hostname as hostname4 } from "node:os";
+import { hostname as hostname4 } from "node:os";
 import { isAbsolute as isAbsolute2, join as join3, resolve as resolve2 } from "node:path";
 var DEFAULT_TTL_MINUTES = 720;
 
@@ -22151,11 +22184,10 @@ class ProductBindingMissingError extends ConfigError {
     this.productPath = productPath;
   }
 }
-var str2 = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
-function grantConfigPath(env) {
-  const home = str2(env.SUPERDEV_HOME) ?? homedir2();
-  return join3(home, ".superdev", "orchestrator.json");
+
+class GrantMissingError extends ConfigError {
 }
+var str2 = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 function productConfigPath(env, cwd) {
   const explicit = str2(env.SUPERDEV_PRODUCT_CONFIG);
   if (explicit)
@@ -22219,7 +22251,7 @@ function loadGrant(pinnedRole, rawEnv = process.env, cwd = process.cwd()) {
   }
   const apiUrl = urlFromEnv.value ?? str2(found?.raw.api_url);
   if (!grant) {
-    throw new ConfigError(`no orchestrator grant configured, so the ${pinnedRole} server has no way to get ` + `a key of its own.
+    throw new GrantMissingError(`no orchestrator grant configured, so the ${pinnedRole} server has no way to get ` + `a key of its own.
 
 ` + `A grant is one credential per MACHINE. Every agent on it gets its own short-lived,
 ` + `role-bound key, so a builder cannot act as a planner and two agents cannot take
@@ -22228,7 +22260,12 @@ function loadGrant(pinnedRole, rawEnv = process.env, cwd = process.cwd()) {
 ` + `  ${grantPath}   (mode 0600)
 ` + `  { "api_url": "https://pando-catalog-api.fly.dev", "grant": "pcat_live_..." }
 
-` + `Mint one with the owner database credential this plugin deliberately does not hold:
+` + `Issue one from the portal, under "Machines" — it takes about thirty seconds and
+` + `needs nothing but the account you already sign in with:
+` + `  ${PORTAL_URL}
+
+` + `If you run your own catalogue, mint one with the owner database credential this
+` + `plugin deliberately does not hold:
 ` + `  cd apps/backend && DATABASE_URL=... bun run mint-grant \\
 ` + `      --org <account> --label "<this machine>" \\
 ` + `      --roles agent_engineer,agent_quality_assurance,agent_product_manager
@@ -22332,7 +22369,8 @@ async function registerAgent(config2, fetchImpl = globalThis.fetch, timeoutMs = 
     pandoRole: str2(body.pando_role) ?? config2.pinnedRole,
     tenants: Array.isArray(body.tenants) ? body.tenants.filter((t) => typeof t === "string") : undefined,
     agentId: str2(body.agent_id) ?? config2.agentId,
-    expiresAt: str2(body.expires_at) ?? ""
+    expiresAt: str2(body.expires_at) ?? "",
+    grantExpiresInDays: typeof body.grant_expires_in_days === "number" && Number.isFinite(body.grant_expires_in_days) ? body.grant_expires_in_days : undefined
   };
 }
 async function provisionProduct(apiUrl, grant, input, fetchImpl = globalThis.fetch, timeoutMs = 1e4) {
@@ -29899,6 +29937,255 @@ function workspaceRoot() {
   return declared !== undefined && declared.trim() !== "" ? declared : process.cwd();
 }
 
+// mcp/src/doctor.ts
+import { existsSync as existsSync4, readFileSync as readFileSync3, statSync as statSync3 } from "node:fs";
+
+// ../../packages/catalog-keys/src/index.ts
+var KEY_PREFIX_LENGTH = 14;
+var KEY_PATTERN = /^pcat_(live|test)_[A-Za-z0-9_-]{43}$/;
+function keyPrefix(key) {
+  return key.slice(0, KEY_PREFIX_LENGTH);
+}
+function isWellFormedKey(key) {
+  return KEY_PATTERN.test(key);
+}
+function environmentOf(key) {
+  const match = /^pcat_(live|test)_/.exec(key);
+  return match ? match[1] : null;
+}
+
+// mcp/src/doctor.ts
+var PINNED = ["product-manager", "engineer", "quality-assurance"];
+function fileReport(path, secret) {
+  if (!existsSync4(path)) {
+    return { path, present: false, problem: undefined, privateMode: true, fields: [] };
+  }
+  let privateMode = true;
+  try {
+    privateMode = (statSync3(path).mode & 63) === 0;
+  } catch {}
+  try {
+    const raw = JSON.parse(readFileSync3(path, "utf8"));
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return { path, present: true, problem: "not a JSON object", privateMode, fields: [] };
+    }
+    return {
+      path,
+      present: true,
+      problem: undefined,
+      privateMode: secret ? privateMode : true,
+      fields: Object.keys(raw).sort()
+    };
+  } catch {
+    return { path, present: true, problem: "not valid JSON", privateMode, fields: [] };
+  }
+}
+function objectAt(path) {
+  try {
+    const raw = JSON.parse(readFileSync3(path, "utf8"));
+    return typeof raw === "object" && raw !== null && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+var str3 = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+function credentials(rawEnv, userPath, projectPath, grantPath) {
+  const found = [];
+  const measure = (source, value) => {
+    if (value === undefined)
+      return;
+    found.push({
+      source,
+      prefix: isWellFormedKey(value) ? keyPrefix(value) : value.slice(0, 10),
+      environment: environmentOf(value) ?? undefined,
+      wellFormed: isWellFormedKey(value)
+    });
+  };
+  measure("SUPERDEV_API_KEY", str3(rawEnv.SUPERDEV_API_KEY));
+  measure("PANDO_CATALOG_API_KEY", str3(rawEnv.PANDO_CATALOG_API_KEY));
+  measure("SUPERDEV_GRANT", str3(rawEnv.SUPERDEV_GRANT));
+  for (const [label, path] of [
+    ["user config.json", userPath],
+    ["project config.json", projectPath]
+  ]) {
+    if (!existsSync4(path))
+      continue;
+    const raw = objectAt(path);
+    measure(`${label} api_key`, str3(raw.api_key));
+    const keys = raw.keys;
+    if (typeof keys === "object" && keys !== null && !Array.isArray(keys)) {
+      for (const role of ROLES) {
+        measure(`${label} keys.${role}`, str3(keys[role]));
+      }
+    }
+  }
+  if (existsSync4(grantPath))
+    measure("orchestrator.json grant", str3(objectAt(grantPath).grant));
+  return found;
+}
+function diagnose(rawEnv = process.env, cwd = process.cwd(), defaultRole = "product-manager") {
+  const env = withoutUnexpandedPlaceholders(rawEnv);
+  const userPath = userConfigPath(env);
+  const projectPath = projectConfigPath(env, cwd);
+  const grantPath = grantConfigPath(env);
+  const productPath = productConfigPath(env, cwd);
+  const files = [
+    fileReport(userPath, true),
+    fileReport(projectPath, true),
+    fileReport(grantPath, true),
+    fileReport(productPath, false)
+  ];
+  const grantFile = files[2];
+  const productFile = files[3];
+  const environment = [];
+  for (const name of [
+    "SUPERDEV_API_URL",
+    "SUPERDEV_API_KEY",
+    "SUPERDEV_GRANT",
+    "SUPERDEV_ROLE",
+    "SUPERDEV_PINNED_ROLE",
+    "SUPERDEV_HOME",
+    "SUPERDEV_CONFIG",
+    "SUPERDEV_PRODUCT",
+    "SUPERDEV_PRODUCT_CONFIG",
+    "SUPERDEV_AGENT_ID",
+    "SUPERDEV_KEY_TTL_MINUTES",
+    "CLAUDE_PROJECT_DIR",
+    ...Object.values(LEGACY_ENV_NAMES)
+  ]) {
+    const raw = rawEnv[name];
+    if (raw === undefined || raw.trim() === "")
+      continue;
+    environment.push(env[name] === undefined ? `${name}  (set to an unexpanded \${...} placeholder — IGNORED)` : name);
+  }
+  const creds = credentials(rawEnv, userPath, projectPath, grantPath);
+  const apiUrl = str3(env.SUPERDEV_API_URL) ?? str3(env.PANDO_CATALOG_API_URL) ?? str3(objectAt(projectPath).api_url) ?? str3(objectAt(userPath).api_url) ?? str3(objectAt(grantPath).api_url);
+  const declaredRole = str3(env.SUPERDEV_ROLE) ?? str3(objectAt(projectPath).role) ?? str3(objectAt(userPath).role);
+  const haveGrant = grantFile.present && grantFile.problem === undefined && str3(objectAt(grantPath).grant) !== undefined;
+  const grantExpiryDays = (() => {
+    const raw = str3(objectAt(grantPath).expires_at);
+    if (raw === undefined)
+      return;
+    const at = Date.parse(raw);
+    return Number.isNaN(at) ? undefined : Math.round((at - Date.now()) / 86400000);
+  })();
+  const bareKey = str3(env.SUPERDEV_API_KEY) ?? str3(env.PANDO_CATALOG_API_KEY) ?? str3(objectAt(projectPath).api_key) ?? str3(objectAt(userPath).api_key);
+  const roleKey = (role) => creds.some((c) => c.source.endsWith(`keys.${role}`));
+  const servers = [];
+  servers.push({
+    name: "catalog",
+    outcome: bareKey !== undefined ? "a configured api_key" : haveGrant ? `a key derived from the grant, as "${declaredRole ?? defaultRole}"` : "NOTHING — it will report setup instructions",
+    detail: bareKey === undefined && haveGrant && declaredRole === undefined ? `no role is declared, so it defaults to "${defaultRole}"` : bareKey === undefined && haveGrant && !productFile.present ? "this repository has no product binding, so it offers catalog_bind_repository only" : undefined
+  });
+  for (const role of PINNED) {
+    servers.push({
+      name: `catalog-${role}`,
+      outcome: haveGrant ? "a key derived from the grant" : roleKey(role) ? `the configured keys.${role}` : "NOTHING — it will report setup instructions",
+      detail: haveGrant && !productFile.present ? role === "product-manager" ? "no product binding, so it offers catalog_bind_repository only" : "no product binding, so it cannot register" : !haveGrant && !roleKey(role) && bareKey !== undefined ? "a bare api_key is present and a pinned server will NOT use one" : undefined
+    });
+  }
+  const problems = [];
+  for (const file2 of files) {
+    if (file2.problem !== undefined)
+      problems.push(`${file2.path} is ${file2.problem}`);
+    if (file2.present && !file2.privateMode) {
+      problems.push(`${file2.path} is readable by other users; run: chmod 600 ${file2.path}`);
+    }
+  }
+  for (const cred of creds) {
+    if (!cred.wellFormed) {
+      problems.push(`${cred.source} is not shaped like a credential (expected pcat_live_… or pcat_test_…)`);
+      continue;
+    }
+    if (cred.environment === "test" && apiUrl !== undefined && !isLocal(apiUrl)) {
+      problems.push(`${cred.source} is a TEST credential but api_url is ${apiUrl}. A test key ` + `against a live catalogue is rejected as though it were invalid.`);
+    }
+  }
+  if (grantExpiryDays !== undefined && grantExpiryDays <= 30) {
+    problems.push(grantExpiryDays <= 0 ? `the grant at ${grantPath} records an expiry that has PASSED. Every agent on this ` + `machine derives its key from it, so all of them have stopped.` : `the grant at ${grantPath} expires in ${grantExpiryDays} days. Every agent on this ` + `machine derives its key from it, so all of them stop together when it lapses.`);
+  }
+  if (apiUrl === undefined && (haveGrant || bareKey !== undefined)) {
+    problems.push("a credential is configured but no api_url is, so nothing knows where to send it");
+  }
+  for (const name of environment) {
+    if (name.includes("placeholder")) {
+      problems.push(`${name.split(" ")[0]} reached this process as a literal "\${...}". It BEATS the ` + `config file it was meant to defer to, so the file is being silenced.`);
+    }
+  }
+  const nextStep = !haveGrant && bareKey === undefined ? "This machine holds no credential. Install one — a grant is the one to want." : problems.length > 0 ? "Fix the problems above; they are local and none of them needs the catalogue." : !productFile.present ? `Nothing is wrong with the credentials. This repository is not bound to a ` + `product — run superdev:init, or call catalog_bind_repository.` : "Nothing is wrong locally. Call catalog_whoami to find out whether the " + "catalogue accepts this credential — that is the half this tool cannot answer.";
+  return {
+    files,
+    environment,
+    credentials: creds,
+    servers,
+    problems,
+    grantExpiresInDays: grantExpiryDays,
+    nextStep
+  };
+}
+function isLocal(apiUrl) {
+  try {
+    const host = new URL(apiUrl).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local");
+  } catch {
+    return false;
+  }
+}
+function render(d) {
+  const lines = [];
+  const mark = (ok) => ok ? "✓" : "✗";
+  lines.push("FILES");
+  for (const f of d.files) {
+    const glyph = !f.present ? "·" : f.problem !== undefined || !f.privateMode ? "✗" : "✓";
+    const state = !f.present ? "not present" : f.problem !== undefined ? f.problem.toUpperCase() : `${f.fields.join(", ") || "empty"}${f.privateMode ? "" : "  [WORLD-READABLE]"}`;
+    lines.push(`  ${glyph} ${f.path}`);
+    lines.push(`      ${state}`);
+  }
+  lines.push("", "ENVIRONMENT");
+  lines.push(d.environment.length === 0 ? "  nothing set — configuration comes from the files above" : d.environment.map((n) => `  ${n}`).join(`
+`));
+  lines.push("", "CREDENTIALS  (prefixes only — the rest is never displayed)");
+  lines.push(d.credentials.length === 0 ? "  none found" : d.credentials.map((c) => `  ${mark(c.wellFormed)} ${c.prefix}…  ${c.source}`).join(`
+`));
+  lines.push("", "WHAT EACH SERVER WOULD RUN ON  (not verified against the catalogue)");
+  for (const s of d.servers) {
+    lines.push(`  ${mark(!s.outcome.startsWith("NOTHING"))} ${s.name.padEnd(26)} ${s.outcome}`);
+    if (s.detail !== undefined)
+      lines.push(`      ${s.detail}`);
+  }
+  if (d.problems.length > 0) {
+    lines.push("", "PROBLEMS");
+    for (const p of d.problems)
+      lines.push(`  ! ${p}`);
+  }
+  if (d.grantExpiresInDays !== undefined) {
+    lines.push("", `GRANT EXPIRY  ${d.grantExpiresInDays} days remaining (as recorded locally by ` + `mint-grant; the catalogue decides)`);
+  }
+  lines.push("", `NEXT: ${d.nextStep}`);
+  return lines.join(`
+`);
+}
+
+// mcp/src/tools/diagnostics.ts
+var diagnosticTools = [
+  {
+    name: "catalog_doctor",
+    title: "Diagnose this machine's catalogue setup",
+    description: "Report what credentials this machine holds, which files and environment variables " + "supplied them, and what each of the four catalog servers would run on. Call this " + "FIRST whenever a catalog tool answers with setup instructions, returns 401, or is " + "missing from the session — it turns 'something is wrong with superdev' into a named " + `file and a named fix.
+
+` + "MAKES NO NETWORK CALL, deliberately: the states most worth diagnosing include a " + "catalogue that cannot be reached, and it answers in all of them. The half it cannot " + "answer is whether the catalogue ACCEPTS the credential — that is catalog_whoami, and " + `the report says so when nothing local is wrong.
+
+` + "Shows credential prefixes only. Show the output to the user: every fix it names is a " + "file on their machine and only they can apply it.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+    worksUnconfigured: true,
+    handler: async () => {
+      const diagnosis = diagnose();
+      return { report: render(diagnosis), ...diagnosis };
+    }
+  }
+];
+
 // mcp/src/tools/evidence.ts
 var evidenceTools = [
   {
@@ -30193,7 +30480,7 @@ var readTools = [
 
 // mcp/src/journal.ts
 import { appendFile, mkdir as mkdir2, readFile as readFile2, writeFile as writeFile2 } from "node:fs/promises";
-import { existsSync as existsSync4 } from "node:fs";
+import { existsSync as existsSync5 } from "node:fs";
 import { dirname as dirname2, join as join4 } from "node:path";
 import { randomUUID } from "node:crypto";
 function journalDir(home) {
@@ -30221,7 +30508,7 @@ async function append(home, stream, productKey2, payload, asAgent) {
 }
 async function readAll(home, stream) {
   const path = journalPath(home, stream);
-  if (!existsSync4(path))
+  if (!existsSync5(path))
     return [];
   const text = await readFile2(path, "utf8");
   const records = [];
@@ -30240,7 +30527,7 @@ async function readAll(home, stream) {
 }
 async function readCursor(home, stream) {
   const path = cursorPath(home, stream);
-  if (!existsSync4(path))
+  if (!existsSync5(path))
     return 0;
   const value = Number.parseInt((await readFile2(path, "utf8")).trim(), 10);
   return Number.isFinite(value) && value >= 0 ? value : 0;
@@ -30933,6 +31220,7 @@ var writeTools = [
 
 // mcp/src/tools/index.ts
 var allTools = [
+  ...diagnosticTools,
   ...readTools,
   ...writeTools,
   ...linkTools,
@@ -30943,6 +31231,7 @@ var allTools = [
 var toolsByName = new Map(allTools.map((tool) => [tool.name, tool]));
 
 // mcp/src/roles.ts
+var ALWAYS = ["catalog_doctor"];
 var READS = [
   "catalog_whoami",
   "catalog_list_products",
@@ -30998,6 +31287,7 @@ function tenantToolsForRole(role) {
 }
 function toolsForRole(role) {
   const names = new Set([
+    ...ALWAYS,
     ...READS,
     ...WRITES_BY_ROLE[role],
     ...tenantToolsForRole(role)
@@ -31558,7 +31848,7 @@ Claims from this session are recorded as "${options.agentId}".` : "")
       inputSchema: tool.inputSchema,
       ...tool.annotations ? { annotations: tool.annotations } : {}
     }, async (args) => {
-      if (options.unconfigured !== undefined) {
+      if (options.unconfigured !== undefined && tool.worksUnconfigured !== true) {
         return {
           content: [{ type: "text", text: options.unconfigured }],
           isError: true
@@ -31623,6 +31913,15 @@ async function identifyKey(apiUrl, apiKey, agentId) {
   }
 }
 var EXPIRY_WARNING_DAYS = 14;
+var GRANT_EXPIRY_WARNING_DAYS = 30;
+function grantExpiryWarning(daysRaw) {
+  if (daysRaw === undefined)
+    return;
+  const days = Math.round(daysRaw);
+  if (days > GRANT_EXPIRY_WARNING_DAYS)
+    return;
+  return days <= 0 ? "this machine's ORCHESTRATOR GRANT expires TODAY. When it lapses, every agent on " + "this machine stops at once — not just this one — and the 401 they get will not " + "say why. Mint a replacement now." : `this machine's ORCHESTRATOR GRANT expires in ${days} day${days === 1 ? "" : "s"}. ` + "It is the credential every agent here derives its key from, so all of them stop " + "together when it lapses. Replacing it needs whoever holds the catalogue's owner " + "credential, so start now rather than on the day.";
+}
 function expiryWarning(daysRaw) {
   if (typeof daysRaw !== "number" || !Number.isFinite(daysRaw))
     return;
@@ -31665,8 +31964,13 @@ function unusableClient() {
 async function startUnconfigured(error51, pinned) {
   note(error51.message);
   note("starting anyway with every tool registered — each one answers with those instructions " + "until a key is configured, because a plugin that vanishes is harder to fix than one " + "that explains itself.");
-  const declared = ENV.SUPERDEV_ROLE?.trim();
-  const declaredRole = pinned ?? (declared !== undefined && declared !== "" && isRole(declared) ? declared : undefined);
+  const declaredRole = pinned ?? (() => {
+    try {
+      return declaredRoleOf(ENV);
+    } catch {
+      return;
+    }
+  })();
   const surface = resolveSurface(undefined, declaredRole);
   const server = createMcpServer(unusableClient(), {
     toolNames: surface.names,
@@ -31725,18 +32029,23 @@ async function startBootstrap(missing) {
   await server.connect(new StdioServerTransport);
   note("1 tool offered: catalog_bind_repository");
 }
-async function startPinned(pinned) {
+var DEFAULT_UNPINNED_ROLE = "product-manager";
+async function startFromGrant(role, options) {
   let grant;
   try {
-    grant = loadGrant(pinned);
+    grant = loadGrant(role);
   } catch (error51) {
-    if (error51 instanceof ProductBindingMissingError && pinned === "product-manager") {
+    if (error51 instanceof ProductBindingMissingError && role === "product-manager") {
       await startBootstrap(error51);
+      return;
+    }
+    if (error51 instanceof GrantMissingError) {
+      await options.noGrant(error51);
       return;
     }
     if (!(error51 instanceof ConfigError))
       throw error51;
-    await startPinnedFromConfiguredKey(pinned, error51);
+    await startUnconfigured(error51, options.pinned ? role : undefined);
     return;
   }
   if (grant.config.sources.length > 0) {
@@ -31750,19 +32059,22 @@ async function startPinned(pinned) {
   } catch (error51) {
     if (!(error51 instanceof RegistrationError))
       throw error51;
-    await startUnconfigured(new ConfigError(`registering this ${pinned} agent with the catalogue failed: ${error51.message}
+    await startUnconfigured(new ConfigError(`registering this ${role} agent with the catalogue failed: ${error51.message}
+
+` + `The grant at ${grant.config.sources[0] ?? "this machine"} was FOUND and used. ` + `This is not a missing key —
+setting api_key anywhere will not address it.
 
 ` + (error51.status === 401 ? `The machine's orchestrator grant was not accepted — it is unknown, revoked, or
 ` + `expired. Mint a replacement; note that revoking a grant deliberately stops every
 ` + `key it ever issued, so other agents on this machine will have stopped too.
 
-` : error51.status === 403 ? `This machine's grant exists but may not mint ${pinned} keys, or may not reach
+` : error51.status === 403 ? `This machine's grant exists but may not mint ${role} keys, or may not reach
 ` + `the product "${grant.config.productKey}". Both are decided by the grant itself,
 ` + `so the fix is a grant with a wider ceiling — not a change here.
 
 ` : "") + `This server is starting with no credential rather than falling back to one
 ` + `configured for a different role. An agent quietly acting as a role it was not
-` + "given is a worse outcome than an agent that cannot act at all."), pinned);
+` + "given is a worse outcome than an agent that cannot act at all."), options.pinned ? role : undefined);
     return;
   }
   const client = new CatalogClient({
@@ -31771,7 +32083,7 @@ async function startPinned(pinned) {
     agentId: registered.agentId,
     cacheHome: workspaceRoot()
   });
-  const surface = resolveSurface(registered.pandoRole, pinned, registered.tenants);
+  const surface = resolveSurface(registered.pandoRole, role, registered.tenants);
   const server = createMcpServer(client, {
     toolNames: surface.names,
     surfaceBasis: surface.basis,
@@ -31780,7 +32092,24 @@ async function startPinned(pinned) {
   await server.connect(new StdioServerTransport);
   note(`connected to ${grant.config.apiUrl}`);
   note(`registered as "${registered.agentId}" for role "${registered.pandoRole}" on product ` + `"${grant.config.productKey}" (key ${registered.keyPrefix}, expires ${registered.expiresAt})`);
+  const grantWarning = grantExpiryWarning(registered.grantExpiresInDays);
+  if (grantWarning !== undefined)
+    note(grantWarning);
   note(`${surface.names.size} tools offered, based on ${surface.basis}`);
+}
+async function startPinned(pinned) {
+  await startFromGrant(pinned, {
+    pinned: true,
+    noGrant: (error51) => startPinnedFromConfiguredKey(pinned, error51)
+  });
+}
+async function startUnpinnedFromGrant(role, absent) {
+  await startFromGrant(role, {
+    pinned: false,
+    noGrant: async () => {
+      await startUnconfigured(absent);
+    }
+  });
 }
 async function main() {
   let pinned;
@@ -31802,12 +32131,27 @@ async function main() {
   } catch (error51) {
     if (!(error51 instanceof ConfigError))
       throw error51;
-    await startUnconfigured(error51);
+    let declared;
+    try {
+      declared = declaredRoleOf(ENV);
+    } catch (roleError) {
+      if (!(roleError instanceof ConfigError))
+        throw roleError;
+      await startUnconfigured(roleError);
+      return;
+    }
+    if (declared === undefined) {
+      note(`no role is declared on this machine, so if a grant is used this server will ` + `register as "${DEFAULT_UNPINNED_ROLE}" — the role the planning skills need. ` + `Set "role" in .superdev/config.json to change it.`);
+    }
+    const role = declared ?? DEFAULT_UNPINNED_ROLE;
+    await startUnpinnedFromGrant(role, error51);
     return;
   }
   await startConfigured(loaded);
 }
 await main();
 export {
-  expiryWarning
+  grantExpiryWarning,
+  expiryWarning,
+  DEFAULT_UNPINNED_ROLE
 };
