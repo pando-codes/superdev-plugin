@@ -11,6 +11,30 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.9.1 — 2026-08-25
+
+**Patch**: no tool's name, arguments, or contract changed. One file stopped shipping.
+
+### Fixed
+
+- **This plugin no longer ships a journal from the machine it was built on.**
+  `.superdev/journal/work-progress.ndjson` held two drained records — `did a thing`, against
+  the `wi_a1b2c3` fixture — swept into a commit during 045's development because the journal is
+  written under `CLAUDE_PROJECT_DIR`, which falls back to the working directory when a tool is
+  driven by hand. It has been in every release since 0.7.0.
+
+  Harmless in this instance: the payloads were test text, no credential was in it, and the
+  cursor said both records were already sent. Not harmless in principle — a journal is an
+  outbox of writes that have **not** reached the catalogue, so shipping one hands every
+  installer somebody else's pending records, which `catalog_drain_journal` would then try to
+  send. If you have installed 0.7.0, 0.8.0, or 0.9.0 and never ran a drain from the plugin's own
+  directory, nothing happened; the file is simply gone now.
+
+  `.superdev/journal/` and `.superdev/cache/` are ignored here as well as at the repository
+  root, and `bundle.test.ts` now asserts neither is tracked — the mirror image of the assertion
+  that keeps `mcp/dist/stdio.js` in the index, and for the same reason: an ignore rule does not
+  untrack a file already in it.
+
 ## 0.9.0 — 2026-08-25
 
 **Minor**, by `docs/guides/releasing.md`'s rule: a new tool. `catalog_doctor` is added and no

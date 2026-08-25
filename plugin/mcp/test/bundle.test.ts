@@ -111,6 +111,46 @@ describe("the committed bundle", () => {
     }).toEqual({ bundle: "mcp/dist/stdio.js", tracked: true });
   });
 
+  /**
+   * The same question in the other direction, and the answer must be no.
+   *
+   * The bundle is committed on purpose; almost nothing else written at runtime
+   * is. `workspace.ts` puts the journal and the read cache under
+   * CLAUDE_PROJECT_DIR, which is the USER's repository in an installed session
+   * — but is THIS directory whenever a tool is driven from here by hand with
+   * that variable unset. Two drained records from a manual 045 check were swept
+   * into a commit that way and published in 0.7.0 through 0.9.0 before anyone
+   * looked at a file listing of the mirror.
+   *
+   * Harmless in that instance, because the payloads were `did a thing`. Not
+   * harmless in principle: a journal is an outbox of writes that have NOT
+   * reached the catalogue, so shipping one hands every installer somebody
+   * else's pending records — and the drain tool would then try to send them.
+   *
+   * Asserted rather than trusted to .gitignore, for the reason the assertion
+   * above exists: an ignore rule does not untrack a file that is already in the
+   * index, which is exactly how this survived being ignored at the root.
+   */
+  test("does NOT ship this machine's journal or read cache", () => {
+    const inRepo = Bun.spawnSync({
+      cmd: ["git", "rev-parse", "--is-inside-work-tree"],
+      cwd: ROOT,
+      stderr: "pipe",
+    });
+    if (inRepo.exitCode !== 0) return;
+
+    const tracked = Bun.spawnSync({
+      cmd: ["git", "ls-files", "--", ".superdev/journal", ".superdev/cache"],
+      cwd: ROOT,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const listed = new TextDecoder().decode(tracked.stdout).trim();
+    // The whole listing, not a count: a failure here should name the file that
+    // is about to be published rather than say "1".
+    expect(listed).toBe("");
+  });
+
   test("exists where .claude-plugin/plugin.json says it does", async () => {
     const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
     const args: string[] = manifest.mcpServers["catalog"].args;

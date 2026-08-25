@@ -6,3 +6,18 @@ node_modules/
 # would have quietly made that per-checkout, and the first symptom would be a
 # teammate's init creating a second product.
 .superdev/config.json
+
+# The local journal and the read cache, for the same reason the key above is
+# ignored and the DIRECTORY is not.
+#
+# Both are written under the workspace the server was launched in, which is
+# normally the user's project — but is this directory whenever a tool is driven
+# from here by hand, with no CLAUDE_PROJECT_DIR set. That is how two drained
+# `did a thing` records from a manual 045 check ended up committed and then
+# published to every install of 0.7.0 through 0.9.0.
+#
+# Harmless in that instance and not in principle: a journal is an outbox of
+# writes that have not reached the catalogue, and shipping one in a plugin
+# release hands every installer someone else's pending records.
+.superdev/journal/
+.superdev/cache/
