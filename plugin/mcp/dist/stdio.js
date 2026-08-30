@@ -22003,10 +22003,11 @@ function readJson(path) {
 }
 var str = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 var UNEXPANDED = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
+var isUnexpandedPlaceholder = (value) => UNEXPANDED.test(value.trim());
 function withoutUnexpandedPlaceholders(env) {
   const scrubbed = { ...env };
   for (const [name, value] of Object.entries(scrubbed)) {
-    if (typeof value === "string" && UNEXPANDED.test(value.trim()))
+    if (typeof value === "string" && isUnexpandedPlaceholder(value))
       delete scrubbed[name];
   }
   return scrubbed;
@@ -29994,6 +29995,8 @@ function credentials(rawEnv, userPath, projectPath, grantPath) {
   const measure = (source, value) => {
     if (value === undefined)
       return;
+    if (isUnexpandedPlaceholder(value))
+      return;
     found.push({
       source,
       prefix: isWellFormedKey(value) ? keyPrefix(value) : value.slice(0, 10),
@@ -30056,7 +30059,7 @@ function diagnose(rawEnv = process.env, cwd = process.cwd(), defaultRole = "prod
     const raw = rawEnv[name];
     if (raw === undefined || raw.trim() === "")
       continue;
-    environment.push(env[name] === undefined ? `${name}  (set to an unexpanded \${...} placeholder — IGNORED)` : name);
+    environment.push(env[name] === undefined ? `${name}  (unexpanded \${...} placeholder — IGNORED, files still win)` : name);
   }
   const creds = credentials(rawEnv, userPath, projectPath, grantPath);
   const apiUrl = str3(env.SUPERDEV_API_URL) ?? str3(env.PANDO_CATALOG_API_URL) ?? str3(objectAt(projectPath).api_url) ?? str3(objectAt(userPath).api_url) ?? str3(objectAt(grantPath).api_url);
@@ -30106,11 +30109,6 @@ function diagnose(rawEnv = process.env, cwd = process.cwd(), defaultRole = "prod
   }
   if (apiUrl === undefined && (haveGrant || bareKey !== undefined)) {
     problems.push("a credential is configured but no api_url is, so nothing knows where to send it");
-  }
-  for (const name of environment) {
-    if (name.includes("placeholder")) {
-      problems.push(`${name.split(" ")[0]} reached this process as a literal "\${...}". It BEATS the ` + `config file it was meant to defer to, so the file is being silenced.`);
-    }
   }
   const nextStep = !haveGrant && bareKey === undefined ? "This machine holds no credential. Install one — a grant is the one to want." : problems.length > 0 ? "Fix the problems above; they are local and none of them needs the catalogue." : !productFile.present ? `Nothing is wrong with the credentials. This repository is not bound to a ` + `product — run superdev:init, or call catalog_bind_repository.` : "Nothing is wrong locally. Call catalog_whoami to find out whether the " + "catalogue accepts this credential — that is the half this tool cannot answer.";
   return {

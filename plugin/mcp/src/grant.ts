@@ -20,6 +20,23 @@
  * tool namespace — and frontmatter is a file on disk, not something the model
  * emits. There is no argument anywhere in this path that names a role.
  *
+ * WHAT THIS DOES NOT COVER: THE SHELL
+ *
+ * Every step above is true of the MCP path and only of it. The agents these
+ * servers serve also hold Bash and Read, and the grant is a file those tools
+ * can open. Nothing here stops a session pinned to `engineer` from reading the
+ * grant and registering a planner key directly — the same escalation this
+ * module refuses through a tool argument, arriving through a shell instead.
+ *
+ * That is a boundary of the mechanism rather than a hole in it, and naming it
+ * is the point. Pinning stops an agent CHOOSING its authority in the ordinary
+ * course of its work, including when a prompt-injected work item asks it to,
+ * and it stops a whole class of confusion besides. It is not a sandbox. A
+ * reader who takes it for one will build on a guarantee this file does not
+ * make. Containing an agent that is actively trying to get out means keeping
+ * the grant out of its reach — a different mechanism, at a layer above this
+ * one.
+ *
  * WHY THE GRANT HAS ITS OWN FILE, AND WHY THERE IS NO PROJECT SCOPE FOR IT
  *
  * config.json resolves across three levels so a repository can say which role it

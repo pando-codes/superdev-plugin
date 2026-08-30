@@ -153,16 +153,56 @@ describe("the states it exists to name", () => {
     const project = dir();
     writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET });
 
-    // 0.6.0 shipped with all four servers in this state. The variable beats the
-    // file it was meant to defer to, so the file is silenced and every message
-    // points somewhere other than at the cause.
+    // 0.6.0 shipped with all four servers in this state, and back then the
+    // variable really did beat the file. withoutUnexpandedPlaceholders ended
+    // that, so what is left to report is the fact, not an alarm: it is visible
+    // in ENVIRONMENT, and the grant file it was meant to defer to is what the
+    // servers actually run on.
     const d = diagnose(
       { SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project, SUPERDEV_API_URL: "${SUPERDEV_API_URL}" },
       project,
     );
 
     expect(d.environment.join("\n")).toContain("IGNORED");
-    expect(d.problems.join("\n")).toContain("silenced");
+    expect(d.problems).toEqual([]);
+    // The half that would be a lie if the scrub ever regressed: the grant file
+    // was read, so every server runs on a key derived from it rather than on
+    // whatever `${SUPERDEV_API_URL}` would have resolved to.
+    for (const s of d.servers) expect(s.outcome).toContain("derived from the grant");
+  });
+
+  /**
+   * The state of EVERY normal install, because plugin.json declares each
+   * variable as `"NAME": "${NAME}"` and most people export none of them. Eight
+   * placeholders used to mean eight problems, which pushed nextStep onto its
+   * "fix the problems above" branch — so a machine with nothing wrong with it
+   * was told to go fix eight things, and never got the advice it needed.
+   */
+  test("a wholly unexported environment is not a machine with problems", () => {
+    const home = dir();
+    const project = dir();
+    writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET });
+    writeJson(project, "product.json", { product_key: "reelmates" }, 0o644);
+
+    const d = diagnose(
+      {
+        SUPERDEV_HOME: home,
+        CLAUDE_PROJECT_DIR: project,
+        SUPERDEV_API_URL: "${SUPERDEV_API_URL}",
+        SUPERDEV_API_KEY: "${SUPERDEV_API_KEY}",
+        SUPERDEV_GRANT: "${SUPERDEV_GRANT}",
+        SUPERDEV_ROLE: "${SUPERDEV_ROLE}",
+        SUPERDEV_CONFIG: "${SUPERDEV_CONFIG}",
+        SUPERDEV_AGENT_ID: "${SUPERDEV_AGENT_ID}",
+        PANDO_CATALOG_API_URL: "${PANDO_CATALOG_API_URL}",
+        PANDO_CATALOG_API_KEY: "${PANDO_CATALOG_API_KEY}",
+      },
+      project,
+    );
+
+    expect(d.problems).toEqual([]);
+    expect(d.nextStep).not.toContain("Fix the problems");
+    expect(d.nextStep).toContain("catalog_whoami");
   });
 
   test("a test credential against a live catalogue — valid apart, wrong together", () => {

@@ -36,6 +36,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { environmentOf, isWellFormedKey, keyPrefix } from "@superdev/catalog-keys";
 import {
   grantConfigPath,
+  isUnexpandedPlaceholder,
   LEGACY_ENV_NAMES,
   projectConfigPath,
   ROLES,
@@ -144,6 +145,11 @@ function credentials(
 
   const measure = (source: string, value: string | undefined): void => {
     if (value === undefined) return;
+    // An unexpanded `${...}` is not a malformed credential, it is an unset
+    // variable wearing one's name, and every normal install has several. Listing
+    // them here put three "is not shaped like a credential" problems in front of
+    // a reader whose credentials were fine. The ENVIRONMENT section names them.
+    if (isUnexpandedPlaceholder(value)) return;
     found.push({
       source,
       // Truncated by the package that defines the format, rather than by a
@@ -226,7 +232,7 @@ export function diagnose(
     if (raw === undefined || raw.trim() === "") continue;
     environment.push(
       env[name] === undefined
-        ? `${name}  (set to an unexpanded \${...} placeholder — IGNORED)`
+        ? `${name}  (unexpanded \${...} placeholder — IGNORED, files still win)`
         : name,
     );
   }
@@ -336,14 +342,16 @@ export function diagnose(
   if (apiUrl === undefined && (haveGrant || bareKey !== undefined)) {
     problems.push("a credential is configured but no api_url is, so nothing knows where to send it");
   }
-  for (const name of environment) {
-    if (name.includes("placeholder")) {
-      problems.push(
-        `${name.split(" ")[0]} reached this process as a literal "\${...}". It BEATS the ` +
-          `config file it was meant to defer to, so the file is being silenced.`,
-      );
-    }
-  }
+  // An unexpanded `${...}` is deliberately NOT a problem. It was one before
+  // withoutUnexpandedPlaceholders existed — see the comment on it in config.ts
+  // for what it broke — but it is scrubbed now, in stdio.ts and again inside
+  // loadConfig and loadGrant, so the file it was meant to defer to wins. It is
+  // also the state of every normal install: plugin.json declares each variable
+  // as `"NAME": "${NAME}"`, so a user who exported none of them gets eight of
+  // these. Calling that eight problems buries the real ones and, because
+  // nextStep branches on problems being empty, replaces the advice that reader
+  // actually needs with "fix the problems above". The ENVIRONMENT section
+  // reports them, marked IGNORED, which is the whole of what is true.
 
   const nextStep = !haveGrant && bareKey === undefined
     ? "This machine holds no credential. Install one — a grant is the one to want."

@@ -11,6 +11,35 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.9.2 — 2026-08-26
+
+**Patch**: no tool's name, arguments, or contract changed. `catalog_doctor` stopped reporting
+problems on machines that have none.
+
+### Fixed
+
+- **`catalog_doctor` no longer calls a healthy install broken.** `plugin.json` declares each
+  server's environment as `"NAME": "${NAME}"`, which is how a plugin says "pass this through if
+  the user exported it". Almost nobody exports them, so the host passes eight literal
+  placeholders through — and the doctor reported every one of them as a problem reading *"it
+  BEATS the config file it was meant to defer to, so the file is being silenced."*
+
+  That sentence was true in 0.6.0 and has been false since `withoutUnexpandedPlaceholders`
+  landed: the scrub runs in `stdio.ts` before anything reads a credential, and again inside
+  `loadConfig` and `loadGrant`, so the file wins. The message outlived the defect it described.
+
+  The cost was not just a wrong sentence. `nextStep` branches on whether `problems` is empty, so
+  a machine with a good grant and nothing wrong with it was told *"fix the problems above"* and
+  never got the advice it needed — bind this repository, or call `catalog_whoami`. Three of the
+  eight also came back a second time through the credential inventory, as `SUPERDEV_API_KEY is
+  not shaped like a credential`, which sends a reader to inspect a key they never set.
+
+  An unexpanded placeholder is now what it actually is: an unset variable, listed once under
+  `ENVIRONMENT` as `IGNORED, files still win`, and not a problem. A placeholder that ever *does*
+  silence a file would be caught by the regression tests in `config.test.ts`, `grant.test.ts`,
+  and `doctor.test.ts` — which is where that guarantee belongs, rather than in a warning printed
+  to everyone whether or not it applies.
+
 ## 0.9.1 — 2026-08-25
 
 **Patch**: no tool's name, arguments, or contract changed. One file stopped shipping.

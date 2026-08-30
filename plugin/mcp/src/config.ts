@@ -182,6 +182,17 @@ const str = (value: unknown): string | undefined =>
 const UNEXPANDED = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 
 /**
+ * Whether a value is an unexpanded placeholder rather than something a person set.
+ *
+ * Exported for doctor.ts, which deliberately reads the RAW environment so that a
+ * set-but-unexpanded variable is still visible. Reading raw means it has to make
+ * this distinction itself, and it must make it the same way the scrub does —
+ * a doctor that disagreed with the loader about what counts as configured would
+ * be diagnosing a machine other than the one it is running on.
+ */
+export const isUnexpandedPlaceholder = (value: string): boolean => UNEXPANDED.test(value.trim());
+
+/**
  * Drops environment entries whose value is an unexpanded `${NAME}` placeholder.
  *
  * WHY THIS EXISTS
@@ -209,7 +220,7 @@ const UNEXPANDED = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 export function withoutUnexpandedPlaceholders(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const scrubbed: NodeJS.ProcessEnv = { ...env };
   for (const [name, value] of Object.entries(scrubbed)) {
-    if (typeof value === "string" && UNEXPANDED.test(value.trim())) delete scrubbed[name];
+    if (typeof value === "string" && isUnexpandedPlaceholder(value)) delete scrubbed[name];
   }
   return scrubbed;
 }
