@@ -1,5 +1,5 @@
 import type { ZodRawShape } from "zod";
-import type { CatalogClient } from "../client.ts";
+import type { BacklogClient } from "../client.ts";
 
 /**
  * A tool as DATA, not as a registration call.
@@ -27,10 +27,10 @@ export interface ToolDefinition {
    * Almost nothing may set this. The unconfigured short-circuit in server.ts is
    * what guarantees an inert server makes NO request — the property the whole
    * unconfigured path rests on — so an exemption is only safe for a tool that
-   * touches neither the client nor the network. `catalog_doctor` is the case it
+   * touches neither the client nor the network. `backlog_doctor` is the case it
    * exists for, and it is the case that most needs it: a diagnostic that
    * refuses to run until the thing it diagnoses is fixed is not a diagnostic.
    */
   readonly worksUnconfigured?: boolean;
-  readonly handler: (client: CatalogClient, args: any) => Promise<unknown>;
+  readonly handler: (client: BacklogClient, args: any) => Promise<unknown>;
 }

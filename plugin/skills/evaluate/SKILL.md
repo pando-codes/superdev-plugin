@@ -1,6 +1,6 @@
 ---
 name: evaluate
-description: You MUST use this before claiming work is complete, opening a PR, or moving on - verifies every in-scope Acceptance Criterion against real test output and records the verdict in the catalog. Evidence before assertions, always.
+description: You MUST use this before claiming work is complete, opening a PR, or moving on - verifies every in-scope Acceptance Criterion against real test output and records the verdict in the backlog. Evidence before assertions, always.
 ---
 
 # Verification Before Completion
@@ -32,7 +32,7 @@ and you must report it as such.
 ### Step 1: Load the criteria in scope
 
 Read every Acceptance Criterion attached to the Feature(s) this work implements, following
-`${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`.  Criteria come from the catalog, not from
+`${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`.  Criteria come from the backlog, not from
 memory of the conversation and not from the implementation — reading them off the code you
 just wrote is circular and proves nothing.
 

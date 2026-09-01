@@ -7,7 +7,7 @@
  * The bundle is built `--target=node` and .claude-plugin/plugin.json launches
  * it with `node`, because the plugin's install is a git checkout on someone
  * else's machine. Requiring `bun` on their PATH made the most likely failure of
- * a public install "the catalog_* tools are not there", for a reason that has
+ * a public install "the backlog_* tools are not there", for a reason that has
  * nothing to do with superdev. Nothing here uses a Bun API — the server speaks
  * fetch, node:fs, node:os, and node:path — so the runtime was a build flag
  * rather than a dependency. `bundle.test.ts` pins that by driving the committed
@@ -34,14 +34,14 @@
  * answers every call with those instructions. It is inert: it holds no key, so
  * it makes no request and there is nothing for it to overstate.
  *
- * WHY THE SERVER ASKS THE CATALOGUE WHO IT IS BEFORE REGISTERING ANYTHING
+ * WHY THE SERVER ASKS THE BACKLOG WHO IT IS BEFORE REGISTERING ANYTHING
  *
  * So that the tools an agent is offered are the tools its key can actually use.
  * The alternative — offer all 26 and let the refusals teach — costs a turn per
  * discovery and, worse, invites an agent to treat a deliberate boundary as an
  * obstacle to route around.
  *
- * That call is best-effort and short. If the catalogue does not answer, the
+ * That call is best-effort and short. If the backlog does not answer, the
  * server starts anyway with the full surface: this narrowing is an ergonomic
  * layer over a boundary Postgres already enforces (see roles.ts), so failing
  * open costs a wider menu, while failing closed would stand up a session with
@@ -49,7 +49,7 @@
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CatalogClient } from "./client.ts";
+import { BacklogClient } from "./client.ts";
 import {
   ConfigError,
   declaredRoleOf,
@@ -89,22 +89,22 @@ const note = (line: string): void => {
 };
 
 /**
- * Asks the catalogue what this key carries: its role, and since 043 its tenants.
+ * Asks the backlog what this key carries: its role, and since 043 its tenants.
  *
  * Bounded rather than left to the default HTTP timeout: this call is on the
- * startup path, and a catalogue that is merely slow must not turn into a
+ * startup path, and a backlog that is merely slow must not turn into a
  * session that never gets its tools.
  */
 interface KeyIdentity {
-  /** What the catalogue says this key carries, or undefined if it could not say. */
+  /** What the backlog says this key carries, or undefined if it could not say. */
   readonly role: string | undefined;
   /**
-   * 043's tenants, or undefined if the catalogue could not say.
+   * 043's tenants, or undefined if the backlog could not say.
    *
    * `undefined` and `[]` are deliberately different: the first means "unknown,
    * show everything and let the database refuse", the second means "this key
    * really does carry no tenant beyond delivery". Collapsing them would turn an
-   * unreachable catalogue into a session missing half its tools.
+   * unreachable backlog into a session missing half its tools.
    */
   readonly tenants: readonly string[] | undefined;
 }
@@ -121,15 +121,15 @@ async function identifyKey(apiUrl: string, apiKey: string, agentId: string): Pro
     });
     if (!response.ok) {
       // 401 is worth naming: it is the single most common cause of "the
-      // catalog_* tools are not there", and the message an operator needs is
+      // backlog_* tools are not there", and the message an operator needs is
       // "your key was rejected", not "the surface could not be narrowed".
       note(
         response.status === 401
-          ? "the catalogue rejected this API key (401). It may be revoked, expired, or " +
+          ? "the backlog rejected this API key (401). It may be revoked, expired, or " +
               "from another environment. Every tool will still be offered, and every " +
               "call will fail until the key is replaced."
           : `whoami returned ${response.status}; offering every tool and letting the ` +
-              "catalogue decide.",
+              "backlog decide.",
       );
       return { role: undefined, tenants: undefined };
     }
@@ -145,7 +145,7 @@ async function identifyKey(apiUrl: string, apiKey: string, agentId: string): Pro
     if (expiry !== undefined) note(expiry);
     return {
       role: typeof body.pando_role === "string" ? body.pando_role : undefined,
-      // A catalogue predating 043 has no `tenants` field at all, and that is
+      // A backlog predating 043 has no `tenants` field at all, and that is
       // not the same as a key with none — so an absent field stays undefined
       // and nothing is narrowed.
       tenants: Array.isArray(body.tenants)
@@ -156,7 +156,7 @@ async function identifyKey(apiUrl: string, apiKey: string, agentId: string): Pro
     note(
       `could not reach ${apiUrl} to identify this key ` +
         `(${error instanceof Error ? error.message : String(error)}); ` +
-        "offering every tool and letting the catalogue decide.",
+        "offering every tool and letting the backlog decide.",
     );
     return { role: undefined, tenants: undefined };
   }
@@ -166,7 +166,7 @@ async function identifyKey(apiUrl: string, apiKey: string, agentId: string): Pro
  * How much warning is worth giving about a key that is about to stop working.
  *
  * Two weeks, because the fix is not something the holder can do themselves —
- * a key is minted by whoever holds the catalogue's owner credential, so the
+ * a key is minted by whoever holds the backlog's owner credential, so the
  * window has to be long enough to ask someone else and wait.
  */
 const EXPIRY_WARNING_DAYS = 14;
@@ -193,7 +193,7 @@ const EXPIRY_WARNING_DAYS = 14;
  * 046. How much warning a GRANT earns, and why it is a longer fuse than a key's.
  *
  * Thirty days rather than fourteen. A key is replaced by whoever holds the
- * catalogue's owner credential and the holder can ask for one the same day; a
+ * backlog's owner credential and the holder can ask for one the same day; a
  * grant is the thing that credentials the entire machine, its replacement has to
  * be minted, delivered, and installed, and when it lapses every agent here stops
  * simultaneously with a 401 that cannot say why. The cohort problem makes it
@@ -216,7 +216,7 @@ export function grantExpiryWarning(daysRaw: number | undefined): string | undefi
         "say why. Mint a replacement now."
     : `this machine's ORCHESTRATOR GRANT expires in ${days} day${days === 1 ? "" : "s"}. ` +
         "It is the credential every agent here derives its key from, so all of them stop " +
-        "together when it lapses. Replacing it needs whoever holds the catalogue's owner " +
+        "together when it lapses. Replacing it needs whoever holds the backlog's owner " +
         "credential, so start now rather than on the day.";
 }
 
@@ -243,11 +243,11 @@ async function startConfigured({ config, warnings }: LoadResult): Promise<void> 
   if (config.sources.length > 0) note(`configuration from ${config.sources.join(", ")}`);
   for (const warning of warnings) note(warning);
 
-  const client = new CatalogClient({
+  const client = new BacklogClient({
     baseUrl: config.apiUrl,
     apiKey: config.apiKey,
     agentId: config.agentId,
-    // So a read still answers when the catalogue cannot be reached. See
+    // So a read still answers when the backlog cannot be reached. See
     // cache.ts for why only a dropped connection falls back and a 403 does not.
     cacheHome: workspaceRoot(),
   });
@@ -274,12 +274,12 @@ async function startConfigured({ config, warnings }: LoadResult): Promise<void> 
  * second lock on the same door: were that guard ever removed, the failure would
  * be a loud one here rather than a request built out of an empty key.
  */
-function unusableClient(): CatalogClient {
-  return new CatalogClient({
+function unusableClient(): BacklogClient {
+  return new BacklogClient({
     baseUrl: "http://superdev-unconfigured.invalid",
     apiKey: "",
     fetch: (async () => {
-      throw new Error("the catalogue was never configured, so nothing may be requested from it");
+      throw new Error("the backlog was never configured, so nothing may be requested from it");
     }) as unknown as typeof globalThis.fetch,
   });
 }
@@ -298,7 +298,7 @@ async function startUnconfigured(error: ConfigError, pinned?: Role): Promise<voi
   // invite it to plan around tools this server is never going to offer.
   //
   // Otherwise a DECLARED role still narrows, exactly as it does when the
-  // catalogue is unreachable — it may never widen, and there is nothing to widen
+  // backlog is unreachable — it may never widen, and there is nothing to widen
   // here in any case: this server holds no key. Resolved with declaredRoleOf
   // rather than by reading SUPERDEV_ROLE directly, so that a `role` in
   // config.json narrows the menu too: an unconfigured server in a repository
@@ -319,7 +319,7 @@ async function startUnconfigured(error: ConfigError, pinned?: Role): Promise<voi
   const server = createMcpServer(unusableClient(), {
     toolNames: surface.names,
     unconfigured:
-      "The superdev catalogue is not configured, so this tool did nothing. No request was " +
+      "The superdev backlog is not configured, so this tool did nothing. No request was " +
       "made. Show the following to the user; it is the whole of the fix, and only they can " +
       `apply it.\n\n${error.message}`,
   });
@@ -421,13 +421,13 @@ async function startPinnedFromConfiguredKey(pinned: Role, absent: ConfigError): 
  * property the pinning rests on. A server that re-registered mid-session after
  * something a tool call did would be a server whose authority changed in
  * response to a request — which is the shape of the thing 039 removed, arriving
- * by a back door. So the tool binds the repository, says plainly that a reload
+ * by a back door. So the tool binds the repository, says plainly that a restart
  * is needed, and this process stays exactly as unprivileged as it started.
  */
 async function startBootstrap(missing: ProductBindingMissingError): Promise<void> {
   note(missing.message.split("\n")[0]!);
   note(
-    "this machine's grant may be able to create it — offering catalog_bind_repository " +
+    "this machine's grant may be able to create it — offering backlog_bind_repository " +
       "and nothing else, because this server holds no key until a product exists.",
   );
 
@@ -440,13 +440,13 @@ async function startBootstrap(missing: ProductBindingMissingError): Promise<void
   });
 
   await server.connect(new StdioServerTransport());
-  note("1 tool offered: catalog_bind_repository");
+  note("1 tool offered: backlog_bind_repository");
 }
 
 /**
  * The role an unpinned server registers as when nothing on this machine says.
  *
- * `product-manager` because the unpinned `catalog` server is the one the MAIN
+ * `product-manager` because the unpinned `backlog` server is the one the MAIN
  * THREAD and the hand-driven skills address (see CLAUDE.md), and those skills —
  * init, brainstorm, plan, recalibrate — exist to author capabilities, features,
  * stories, and criteria. A default of `engineer` would make the server that
@@ -526,7 +526,7 @@ async function startFromGrant(role: Role, options: GrantStart): Promise<void> {
     if (!(error instanceof RegistrationError)) throw error;
     await startUnconfigured(
       new ConfigError(
-        `registering this ${role} agent with the catalogue failed: ${error.message}\n\n` +
+        `registering this ${role} agent with the backlog failed: ${error.message}\n\n` +
           `The grant at ${grant.config.sources[0] ?? "this machine"} was FOUND and used. ` +
           `This is not a missing key —\nsetting api_key anywhere will not address it.\n\n` +
           (error.status === 401
@@ -547,7 +547,7 @@ async function startFromGrant(role: Role, options: GrantStart): Promise<void> {
     return;
   }
 
-  const client = new CatalogClient({
+  const client = new BacklogClient({
     baseUrl: grant.config.apiUrl,
     apiKey: registered.apiKey,
     agentId: registered.agentId,
@@ -556,7 +556,7 @@ async function startFromGrant(role: Role, options: GrantStart): Promise<void> {
 
   // No whoami round trip: the registration response already said which role the
   // key carries, and it came from the same statement that minted it. The
-  // intersection is still taken, so a catalogue that somehow answered with a
+  // intersection is still taken, so a backlog that somehow answered with a
   // different role than was asked for narrows rather than widens.
   const surface = resolveSurface(registered.pandoRole, role, registered.tenants);
 
@@ -596,7 +596,7 @@ async function startPinned(pinned: Role): Promise<void> {
 }
 
 /**
- * The unpinned `catalog` server, on a machine that has a grant and no api_key.
+ * The unpinned `backlog` server, on a machine that has a grant and no api_key.
  *
  * WHY THIS PATH WAS MISSING, AND WHAT IT COST
  *

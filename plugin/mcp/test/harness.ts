@@ -3,7 +3,7 @@
  *
  * WHY THIS IS NOT THE SUITE THIS PACKAGE USED TO HAVE
  *
- * When the server lived alongside the API, its tests pointed the CatalogClient's
+ * When the server lived alongside the API, its tests pointed the BacklogClient's
  * injectable fetch straight at the Hono app in-process, so every call traversed
  * the genuine auth middleware, the genuine per-role pools, and the genuine RLS
  * policies. That suite still exists and still runs — it lives in
@@ -21,12 +21,12 @@
  * what was sent.
  *
  * The line to hold: assertions here are about the REQUEST. Nothing here may
- * assert what the catalogue would answer, because nothing here knows.
+ * assert what the backlog would answer, because nothing here knows.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { CatalogClient } from "../src/client.ts";
+import { BacklogClient } from "../src/client.ts";
 import { createMcpServer, type ServerOptions } from "../src/server.ts";
 
 export interface RecordedRequest {
@@ -84,8 +84,8 @@ export async function startStub(options: ServerOptions = {}): Promise<StubHarnes
   }) as typeof globalThis.fetch;
 
   const server = createMcpServer(
-    new CatalogClient({
-      baseUrl: "http://catalog.test",
+    new BacklogClient({
+      baseUrl: "http://backlog.test",
       apiKey: TEST_KEY,
       agentId: TEST_AGENT,
       fetch: recordingFetch,

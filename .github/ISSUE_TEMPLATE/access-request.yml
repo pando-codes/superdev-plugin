@@ -1,12 +1,12 @@
-name: Request access to the hosted catalog
-description: The catalog is invite-only while it is in beta. Ask for a key here.
+name: Request access to the hosted backlog
+description: The backlog is invite-only while it is in beta. Ask for a key here.
 title: "Access request: <your product>"
 labels: ["access-request"]
 body:
   - type: markdown
     attributes:
       value: |
-        The plugin is free and public. The **catalog** it talks to is invite-only
+        The plugin is free and public. The **backlog** it talks to is invite-only
         for now, because each account is provisioned by hand — see
         [what is not true yet](https://github.com/pando-codes/superdev-plugin#what-is-not-true-yet)
         for why.
@@ -20,7 +20,7 @@ body:
     id: product
     attributes:
       label: What are you building?
-      description: One line. It becomes your product's name in the catalog.
+      description: One line. It becomes your product's name in the backlog.
       placeholder: A telemetry dashboard for Claude Code teams
     validations:
       required: true
@@ -76,7 +76,7 @@ body:
       label: Before you file this
       options:
         - label: >
-            I understand the catalog has no terms of service or DPA yet, one
+            I understand the backlog has no terms of service or DPA yet, one
             region, and no SLO, and I will not put anything in it that needs
             those.
           required: true

@@ -16,7 +16,7 @@
  *     between them by re-exporting a variable means the choice is invisible and
  *     easy to get wrong.
  *   * WORKING AT ALL WITHOUT A SHELL. A key exported in one terminal does not
- *     exist in the next one, which is the most common way for the catalog_*
+ *     exist in the next one, which is the most common way for the backlog_*
  *     tools to be mysteriously absent.
  *
  * So configuration resolves at three precedences, and the environment stays the
@@ -28,8 +28,9 @@
  *
  * WHY THE ENVIRONMENT VARIABLES HAVE TWO NAMES
  *
- * They used to be PANDO_CATALOG_*, from when this project was called
- * pando-catalog. The project is superdev; the variables are SUPERDEV_*. The old
+ * They used to be PANDO_CATALOG_API_URL, PANDO_CATALOG_API_KEY, and
+ * PANDO_CATALOG_GRANT, from when this project was called pando-catalog. The
+ * project is superdev; the variables are SUPERDEV_*. The old
  * names are still read, because they are sitting in shell profiles, CI
  * definitions, and container manifests on machines this repository has no
  * reach into — and a renamed variable that is silently ignored presents as a
@@ -90,7 +91,7 @@ export const PORTAL_URL = "https://superdev-portal.vercel.app";
 export const ACCESS_REQUEST_URL =
   "https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml";
 
-/** The six roles the catalogue defines. Mirrors private.db_role_map. */
+/** The six roles the backlog defines. Mirrors private.db_role_map. */
 export const ROLES = [
   "product-manager",
   "quality-assurance",
@@ -113,7 +114,7 @@ export interface SuperdevConfig {
    * The role this process INTENDS to act as, when it was stated. Only ever used
    * to pick a key and to narrow the tool surface — never to claim authority.
    * What the key actually carries is decided by the database and reported by
-   * `catalog_whoami`.
+   * `backlog_whoami`.
    */
   readonly declaredRole: Role | undefined;
   readonly agentId: string;
@@ -129,7 +130,7 @@ export interface SuperdevConfig {
    * the pinning would become a suggestion.
    */
   readonly keyedByRole: boolean;
-  /** Every file that contributed, for `catalog_whoami`'s diagnostics. */
+  /** Every file that contributed, for `backlog_whoami`'s diagnostics. */
   readonly sources: readonly string[];
 }
 
@@ -156,7 +157,7 @@ function readJson(path: string): { raw: RawConfig; insecure: boolean } | undefin
     raw = JSON.parse(text);
   } catch {
     // Named explicitly. A malformed config that fell back to "unconfigured"
-    // would present as the catalog_* tools simply not being there, which sends
+    // would present as the backlog_* tools simply not being there, which sends
     // people looking at their key rather than at their comma.
     throw new ConfigError(`${path} is not valid JSON`);
   }
@@ -245,8 +246,8 @@ export interface EnvRead {
 }
 
 /**
- * Reads a SUPERDEV_* variable, falling back to the PANDO_CATALOG_* name it
- * replaced.
+ * Reads a SUPERDEV_* variable, falling back to the PANDO_CATALOG_API_URL-style
+ * name LEGACY_ENV_NAMES records for it.
  *
  * The current name wins outright when both are set, rather than the two being
  * merged or the older one being treated as an error: someone mid-migration has
@@ -376,7 +377,7 @@ function roleFrom(raw: string | undefined): Role | undefined {
   if (raw === undefined) return undefined;
   if (!isRole(raw)) {
     throw new ConfigError(
-      `"${raw}" is not a role this catalogue defines. Known roles: ${ROLES.join(", ")}.`,
+      `"${raw}" is not a role this backlog defines. Known roles: ${ROLES.join(", ")}.`,
     );
   }
   return raw;
@@ -460,7 +461,7 @@ export function loadConfig(
     warnings.push(
       `role "${declaredRole}" was requested but no keys.${declaredRole} is configured, ` +
         "so the default api_key is being used. Its ACTUAL authority is whatever that key " +
-        "carries — ask catalog_whoami rather than assuming the requested role was honoured.",
+        "carries — ask backlog_whoami rather than assuming the requested role was honoured.",
     );
   }
 
@@ -479,12 +480,12 @@ export function loadConfig(
         `    "keys": { "engineer": "pcat_live_...", "product-manager": "pcat_live_..." }\n` +
         `  }\n\n` +
         grantSituation(env) +
-        `If you have an account on the hosted catalogue, issue yourself a key:\n` +
+        `If you have an account on the hosted backlog, issue yourself a key:\n` +
         `  ${PORTAL_URL}\n\n` +
-        `The catalogue is invite-only while it is in beta. If you do not have an\n` +
+        `The backlog is invite-only while it is in beta. If you do not have an\n` +
         `account yet, ask for one:\n` +
         `  ${ACCESS_REQUEST_URL}\n\n` +
-        `If you run your own catalogue, a key is minted with the owner database\n` +
+        `If you run your own backlog, a key is minted with the owner database\n` +
         `credential this plugin deliberately does not hold:\n` +
         `  cd apps/backend && DATABASE_URL=... bun run mint-key \\\n` +
         `      --role agent_engineer --label "<who>" --product <product>`,

@@ -1,12 +1,12 @@
 /**
- * The last answer the catalogue gave, kept so a read still works offline.
+ * The last answer the backlog gave, kept so a read still works offline.
  *
  * WHY READS ARE CACHED AND WRITES ARE JOURNALLED
  *
  * They are the two halves of the same rule and they are not symmetrical. A
- * write that cannot reach the catalogue is a fact the catalogue does not have
+ * write that cannot reach the backlog is a fact the backlog does not have
  * yet, so it waits in the journal and is sent later. A read that cannot reach
- * the catalogue is a question with a slightly old answer already on disk, so it
+ * the backlog is a question with a slightly old answer already on disk, so it
  * is answered from there and SAID TO BE OLD.
  *
  * The design's reasoning for allowing the stale answer at all: the criterion an
@@ -17,7 +17,7 @@
  * WHY ONLY A DROPPED CONNECTION FALLS BACK
  *
  * A 403 is an ANSWER. So is a 404, and so is a 401. Serving a cached success in
- * place of any of them would tell an agent it may read something the catalogue
+ * place of any of them would tell an agent it may read something the backlog
  * has just said it may not — the exact inversion of the boundary the tenant gate
  * and RLS exist to hold. Only a request that never got an answer falls back,
  * which is why the client distinguishes a thrown `ApiError` from a thrown
@@ -78,7 +78,7 @@ export async function remember(home: string, path: string, body: unknown): Promi
  * Returns undefined when nothing was ever cached, which the caller must treat
  * as "the read failed" rather than as an empty result — an agent told a product
  * has no capabilities when the truth is that nobody could ask is worse off than
- * one told the catalogue is unreachable.
+ * one told the backlog is unreachable.
  */
 export async function recall(home: string, path: string): Promise<unknown | undefined> {
   try {

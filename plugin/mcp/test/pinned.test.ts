@@ -42,7 +42,7 @@ function dir(): string {
 
 async function runtime(): Promise<string> {
   const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-  return manifest.mcpServers["catalog"].command;
+  return manifest.mcpServers["backlog"].command;
 }
 
 function writeJson(root: string, name: string, body: unknown, mode = 0o600): void {
@@ -52,7 +52,7 @@ function writeJson(root: string, name: string, body: unknown, mode = 0o600): voi
 
 interface Started {
   readonly tools: string[];
-  /** The text `catalog_whoami` answered with, and whether it was an error. */
+  /** The text `backlog_whoami` answered with, and whether it was an error. */
   readonly whoami: { text: string; isError: boolean };
 }
 
@@ -72,7 +72,7 @@ async function start(env: Record<string, string>, cwd: string): Promise<Started>
   try {
     await client.connect(transport);
     const listed = await client.listTools();
-    const result: any = await client.callTool({ name: "catalog_whoami", arguments: {} });
+    const result: any = await client.callTool({ name: "backlog_whoami", arguments: {} });
     return {
       tools: listed.tools.map((t) => t.name).sort(),
       whoami: {
@@ -110,7 +110,7 @@ describe("a pinned server with nothing configured", () => {
     expect(started.whoami.text).toContain("mint-grant");
     // And it must say the single-key arrangement still works, or the reader
     // concludes this release broke their setup.
-    expect(started.whoami.text).toContain('the unpinned "catalog" server');
+    expect(started.whoami.text).toContain('the unpinned "backlog" server');
   }, 30_000);
 });
 
@@ -119,7 +119,7 @@ describe("what a pinned server will and will not accept as a credential", () => 
     const home = dir();
     const project = dir();
     writeJson(home, "config.json", {
-      api_url: "http://catalog.invalid",
+      api_url: "http://backlog.invalid",
       // No role attached to this key anywhere. Its authority is whatever it
       // happens to carry, which is exactly what a pinned server must not build
       // its menu on top of.
@@ -147,7 +147,7 @@ describe("what a pinned server will and will not accept as a credential", () => 
     const home = dir();
     const project = dir();
     writeJson(home, "config.json", {
-      api_url: "http://catalog.invalid",
+      api_url: "http://backlog.invalid",
       keys: { engineer: "pcat_test_0000000000000000000000000000000000000000" },
     });
     writeJson(project, "product.json", { product_key: "reelmates" }, 0o644);
@@ -164,7 +164,7 @@ describe("what a pinned server will and will not accept as a credential", () => 
     // Configured: whoami is a real call that fails on the unreachable host,
     // rather than the setup instructions an unconfigured server answers with.
     expect(started.whoami.text).not.toContain("mint-grant");
-    // The catalogue is unreachable, so the surface fails open to everything —
+    // The backlog is unreachable, so the surface fails open to everything —
     // documented in stdio.ts as deliberate. What matters here is that the server
     // got past configuration at all.
     expect(started.tools.length).toBeGreaterThan(0);
@@ -180,7 +180,7 @@ describe("what a pinned server will and will not accept as a credential", () => 
         SUPERDEV_HOME: home,
         CLAUDE_PROJECT_DIR: project,
         SUPERDEV_PINNED_ROLE: "engineer",
-        SUPERDEV_API_URL: "http://catalog.invalid",
+        SUPERDEV_API_URL: "http://backlog.invalid",
         // The old single-role setup told people to export exactly this. A pinned
         // server that honoured it would inherit whatever role that key carries.
         SUPERDEV_API_KEY: "pcat_test_0000000000000000000000000000000000000000",
@@ -198,7 +198,7 @@ describe("what pins a server", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "config.json", {
-      api_url: "http://catalog.invalid",
+      api_url: "http://backlog.invalid",
       api_key: "pcat_test_0000000000000000000000000000000000000000",
     });
 
@@ -223,7 +223,7 @@ describe("what pins a server", () => {
  *
  * WHAT IS ACTUALLY UNDER TEST
  *
- * Not that binding works — that needs a catalogue, and the backend suite proves
+ * Not that binding works — that needs a backlog, and the backend suite proves
  * it against a real one. What only exists here is WHICH SERVER IS OFFERED THE
  * TOOL. A builder that could conjure the product it then writes features under
  * would be choosing its own subject, which is the same shape of mistake as
@@ -252,7 +252,7 @@ describe("a repository with no product binding (040)", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "orchestrator.json", {
-      api_url: "http://catalog.invalid",
+      api_url: "http://backlog.invalid",
       grant: "pcat_live_0000000000000000000000000000000000000000",
     });
     return {
@@ -265,17 +265,17 @@ describe("a repository with no product binding (040)", () => {
     const { env, project } = machine();
     const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "product-manager" }, project);
 
-    // Exactly one. Registering the catalogue surface here would be a lie — this
+    // Exactly one. Registering the backlog surface here would be a lie — this
     // server holds no key and every one of those tools would refuse — and worse,
     // it would invite an agent to plan around them.
-    expect(tools).toEqual(["catalog_bind_repository"]);
+    expect(tools).toEqual(["backlog_bind_repository"]);
   });
 
   test("the engineer server does NOT, and stays inert", async () => {
     const { env, project } = machine();
     const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "engineer" }, project);
 
-    expect(tools).not.toContain("catalog_bind_repository");
+    expect(tools).not.toContain("backlog_bind_repository");
     // Its own menu, unusable, exactly as before 040: the fix for a builder is
     // still somebody else binding the repository.
     expect(tools).toEqual([...toolsForRole("engineer")].sort());
@@ -284,7 +284,7 @@ describe("a repository with no product binding (040)", () => {
   test("the quality-assurance server does not either", async () => {
     const { env, project } = machine();
     const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "quality-assurance" }, project);
-    expect(tools).not.toContain("catalog_bind_repository");
+    expect(tools).not.toContain("backlog_bind_repository");
   });
 
   test("and once a binding exists, the product-manager server is an ordinary pinned server again", async () => {
@@ -293,10 +293,10 @@ describe("a repository with no product binding (040)", () => {
 
     const tools = await toolsOf({ ...env, SUPERDEV_PINNED_ROLE: "product-manager" }, project);
 
-    // It cannot reach http://catalog.invalid to register, so it is inert — but
+    // It cannot reach http://backlog.invalid to register, so it is inert — but
     // inert with its ROLE's menu, not with the bootstrap tool. The bootstrap
     // server exists for one condition and disappears when that condition does.
-    expect(tools).not.toContain("catalog_bind_repository");
+    expect(tools).not.toContain("backlog_bind_repository");
     expect(tools).toEqual([...toolsForRole("product-manager")].sort());
   });
 });

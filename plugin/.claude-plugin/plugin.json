@@ -1,13 +1,13 @@
 {
   "name": "superdev",
-  "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the superdev catalogue and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
-  "version": "0.9.2",
+  "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the superdev backlog and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
+  "version": "0.10.0",
   "author": {
     "name": "Alex",
     "email": "alex@pando.codes"
   },
   "mcpServers": {
-    "catalog": {
+    "backlog": {
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
@@ -24,7 +24,7 @@
         "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
       }
     },
-    "catalog-product-manager": {
+    "backlog-product-manager": {
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
@@ -43,7 +43,7 @@
         "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
       }
     },
-    "catalog-engineer": {
+    "backlog-engineer": {
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
@@ -62,7 +62,7 @@
         "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
       }
     },
-    "catalog-quality-assurance": {
+    "backlog-quality-assurance": {
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"

@@ -1,5 +1,5 @@
 /**
- * The catalogue surface this plugin actually exposes, asserted as a whole.
+ * The backlog surface this plugin actually exposes, asserted as a whole.
  *
  * WHY A TEST AND NOT A DOC
  *
@@ -21,56 +21,56 @@ import { schemaResources } from "../src/resources.ts";
 
 /** Reads are open to every provisioned role — 012: "reading is not an assertion". */
 const READS = [
-  "catalog_whoami",
-  "catalog_list_products",
-  "catalog_list_capabilities",
-  "catalog_get_capability",
-  "catalog_list_features",
-  "catalog_get_feature",
-  "catalog_get_story",
-  "catalog_get_acceptance_criterion",
-  "catalog_model_health",
-  "catalog_coverage",
-  "catalog_public_catalog",
-  "catalog_list_work",
-  "catalog_get_work",
+  "backlog_whoami",
+  "backlog_list_products",
+  "backlog_list_capabilities",
+  "backlog_get_capability",
+  "backlog_list_features",
+  "backlog_get_feature",
+  "backlog_get_story",
+  "backlog_get_acceptance_criterion",
+  "backlog_model_health",
+  "backlog_coverage",
+  "backlog_public_view",
+  "backlog_list_work",
+  "backlog_get_work",
   // 041/042's tenants. Reads, so they carry readOnlyHint like the rest.
-  "catalog_read_messages",
-  "catalog_read_decisions",
+  "backlog_read_messages",
+  "backlog_read_decisions",
   // Touches the local journal and no network, which makes it a read of this
   // machine's state — it changes nothing anywhere.
-  "catalog_journal_status",
+  "backlog_journal_status",
   // Reads this machine's files and environment and nothing else. The only tool
   // that answers on a server holding no credential at all.
-  "catalog_doctor",
+  "backlog_doctor",
 ];
 
 /** Authority varies per tool; the database decides, not this list. */
 const WRITES = [
-  "catalog_create_product",
-  "catalog_create_capability",
-  "catalog_update_capability",
-  "catalog_create_feature",
-  "catalog_update_feature",
-  "catalog_create_story",
-  "catalog_update_story",
-  "catalog_create_acceptance_criterion",
-  "catalog_update_acceptance_criterion",
-  "catalog_link",
-  "catalog_unlink",
-  "catalog_record_evaluation",
-  "catalog_record_evidence",
-  "catalog_claim_work",
-  "catalog_heartbeat_work",
-  "catalog_push_progress",
-  "catalog_finish_work",
-  "catalog_file_work",
-  "catalog_steward_work",
-  "catalog_send_message",
-  "catalog_record_decision",
+  "backlog_create_product",
+  "backlog_create_capability",
+  "backlog_update_capability",
+  "backlog_create_feature",
+  "backlog_update_feature",
+  "backlog_create_story",
+  "backlog_update_story",
+  "backlog_create_acceptance_criterion",
+  "backlog_update_acceptance_criterion",
+  "backlog_link",
+  "backlog_unlink",
+  "backlog_record_evaluation",
+  "backlog_record_evidence",
+  "backlog_claim_work",
+  "backlog_heartbeat_work",
+  "backlog_push_progress",
+  "backlog_finish_work",
+  "backlog_file_work",
+  "backlog_steward_work",
+  "backlog_send_message",
+  "backlog_record_decision",
   // A write even though it sends nothing new: it moves records from this
-  // machine to the catalogue, which is a change of state somewhere.
-  "catalog_drain_journal",
+  // machine to the backlog, which is a change of state somewhere.
+  "backlog_drain_journal",
 ];
 
 describe("the tool roster", () => {
@@ -112,22 +112,22 @@ describe("the tool roster", () => {
   });
 
   test("there is no tool that renames or deletes a product", () => {
-    // 026 widened INSERT only. A catalogue's product key scopes every other row
+    // 026 widened INSERT only. A backlog's product key scopes every other row
     // in it, so the absence of these is the design, not an oversight.
     const names = allTools.map((t) => t.name);
-    expect(names).not.toContain("catalog_update_product");
-    expect(names).not.toContain("catalog_delete_product");
+    expect(names).not.toContain("backlog_update_product");
+    expect(names).not.toContain("backlog_delete_product");
   });
 });
 
 describe("the schema resources", () => {
-  test("cover all five entities under catalog://schema/", () => {
+  test("cover all five entities under backlog://schema/", () => {
     expect(schemaResources.map((r) => r.uri).sort()).toEqual([
-      "catalog://schema/acceptance-criterion",
-      "catalog://schema/capability",
-      "catalog://schema/feature",
-      "catalog://schema/product",
-      "catalog://schema/story",
+      "backlog://schema/acceptance-criterion",
+      "backlog://schema/capability",
+      "backlog://schema/feature",
+      "backlog://schema/product",
+      "backlog://schema/story",
     ]);
   });
 

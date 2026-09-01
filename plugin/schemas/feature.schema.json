@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pando.codes/catalog/schemas/feature.schema.json",
+  "$id": "https://pando.codes/backlog/schemas/feature.schema.json",
   "title": "Feature",
   "description": "A thing the product does, serving one or more Capabilities. The contract boundary: Stories and Acceptance Criteria hang off a Feature, not off each other. Source: supabase/migrations/003_feature.sql",
   "type": "object",

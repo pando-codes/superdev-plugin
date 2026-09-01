@@ -11,7 +11,7 @@ import type { ToolDefinition } from "./types.ts";
  * permission check here would be a third copy of an authority table that already
  * exists in exactly one correct place.
  *
- * Descriptions carry the quality bar the database cannot enforce. the catalogue
+ * Descriptions carry the quality bar the database cannot enforce. the backlog
  * enforces SHAPE, not QUALITY — `scope_boundary = 'stuff'` satisfies every
  * constraint in the schema. An agent reading only the schema would write records
  * that pass and are worthless, so the bar travels with the tool.
@@ -41,17 +41,17 @@ const featureScopeBoundary = z
 
 export const writeTools: ToolDefinition[] = [
   {
-    name: "catalog_create_product",
+    name: "backlog_create_product",
     title: "Create a product",
     description:
-      "Create a product — the root of a catalogue, and the partition every capability, " +
+      "Create a product — the root of a backlog, and the partition every capability, " +
       "feature, story, and criterion is scoped by. Requires product-manager or " +
       "head-of-engineering (026).\n\n" +
       "THIS IS A ONCE-PER-REPOSITORY OPERATION. There is deliberately no tool to rename or " +
-      "delete a product, because the key scopes every other row in the catalogue: getting it " +
-      "wrong is not something a later call can undo. Call catalog_list_products first and " +
+      "delete a product, because the key scopes every other row in the backlog: getting it " +
+      "wrong is not something a later call can undo. Call backlog_list_products first and " +
       "confirm the product does not already exist under another name.\n\n" +
-      "A second product for a repository that already has one silently SPLITS its catalogue — " +
+      "A second product for a repository that already has one silently SPLITS its backlog — " +
       "nothing in the schema prevents it and nothing downstream will notice, because every " +
       "query scopes by product_id and will simply return the half it was pointed at.\n\n" +
       "The key is the durable identifier and belongs in .superdev/product.json; the name is " +
@@ -65,7 +65,7 @@ export const writeTools: ToolDefinition[] = [
     handler: async (client, args) => (await client.post("/v1/products", args)).body,
   },
   {
-    name: "catalog_create_capability",
+    name: "backlog_create_capability",
     title: "Create a capability",
     description:
       "Add a capability to a product. Requires product-manager.\n\n" +
@@ -95,7 +95,7 @@ export const writeTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_update_capability",
+    name: "backlog_update_capability",
     title: "Update a capability",
     description:
       "Revise a capability. Requires product-manager. Only the fields you send change.\n\n" +
@@ -123,7 +123,7 @@ export const writeTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_create_feature",
+    name: "backlog_create_feature",
     title: "Create a feature",
     description:
       "Add a feature and link it to at least one capability, in one transaction. " +
@@ -157,7 +157,7 @@ export const writeTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_update_feature",
+    name: "backlog_update_feature",
     title: "Update a feature",
     description:
       "Revise a feature. Requires product-manager. Only the fields you send change.\n\n" +
@@ -195,7 +195,7 @@ export const writeTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_create_story",
+    name: "backlog_create_story",
     title: "Create a user story",
     description:
       "Add a user story, optionally linked to a feature in the same transaction. " +
@@ -224,7 +224,7 @@ export const writeTools: ToolDefinition[] = [
     handler: async (client, args) => (await client.post("/v1/stories", args)).body,
   },
   {
-    name: "catalog_update_story",
+    name: "backlog_update_story",
     title: "Update a user story",
     description:
       "Revise a story. Requires product-manager. Only the fields you send change.\n\n" +
@@ -247,7 +247,7 @@ export const writeTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_create_acceptance_criterion",
+    name: "backlog_create_acceptance_criterion",
     title: "Create an acceptance criterion",
     description:
       "Add an acceptance criterion, optionally linked to a feature in the same transaction. " +
@@ -276,7 +276,7 @@ export const writeTools: ToolDefinition[] = [
     handler: async (client, args) => (await client.post("/v1/acceptance-criteria", args)).body,
   },
   {
-    name: "catalog_update_acceptance_criterion",
+    name: "backlog_update_acceptance_criterion",
     title: "Update an acceptance criterion",
     description:
       "Revise a criterion. Requires product-manager. Only the fields you send change.\n\n" +

@@ -8,7 +8,7 @@ import type { ToolDefinition } from "./types.ts";
  * These are the tools that make the model's numbers mean anything. Before any
  * of these records exist, `latest_ac_state` is empty, nothing is verified, every
  * capability weight is NULL, and coverage is zero — which is precisely the state
- * a fresh catalogue reports, and it looks like bad news rather than missing
+ * a fresh backlog reports, and it looks like bad news rather than missing
  * input.
  *
  * Both tables are append-only. There is no update or delete tool because the
@@ -16,7 +16,7 @@ import type { ToolDefinition } from "./types.ts";
  */
 export const evidenceTools: ToolDefinition[] = [
   {
-    name: "catalog_record_evaluation",
+    name: "backlog_record_evaluation",
     title: "Record an evaluation",
     description:
       "Record one evaluation of one acceptance criterion. Requires quality-assurance or ci.\n\n" +
@@ -47,7 +47,7 @@ export const evidenceTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_record_evidence",
+    name: "backlog_record_evidence",
     title: "Record an evidence window",
     description:
       "Record one signal kind across a product for one window. Requires revops or ci.\n\n" +
@@ -56,7 +56,7 @@ export const evidenceTools: ToolDefinition[] = [
       "kind participates in capability weighting only once it has FULL coverage for the " +
       "window, so a batch that skips zero-activity capabilities never reaches it. The kind " +
       "never participates, every weight tied to it stays null, and NOTHING ERRORS — rows land " +
-      "and the pipeline looks healthy. Call catalog_list_capabilities with status=active first " +
+      "and the pipeline looks healthy. Call backlog_list_capabilities with status=active first " +
       "and send one entry per key it returns.\n\n" +
       "An incomplete batch is refused and names what is missing. allow_partial overrides that " +
       "and is rarely the right answer.\n\n" +

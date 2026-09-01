@@ -48,11 +48,11 @@ describe("what it must never print", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "config.json", {
-      api_url: "https://catalog.example",
+      api_url: "https://backlog.example",
       api_key: SECRET,
       keys: { engineer: SECRET, "product-manager": SECRET },
     });
-    writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET });
+    writeJson(home, "orchestrator.json", { api_url: "https://backlog.example", grant: SECRET });
 
     const d = diagnose(
       { SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project, SUPERDEV_API_KEY: SECRET },
@@ -76,7 +76,7 @@ describe("what it must never print", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "config.json", {
-      api_url: "https://catalog.example",
+      api_url: "https://backlog.example",
       api_key: "not-a-key-but-still-a-secret-someone-pasted",
     });
 
@@ -92,7 +92,7 @@ describe("a machine credentialled the way mint-grant leaves it", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "orchestrator.json", {
-      api_url: "https://catalog.example",
+      api_url: "https://backlog.example",
       grant: SECRET,
     });
     writeJson(project, "product.json", { product_key: "reelmates" }, 0o644);
@@ -114,10 +114,10 @@ describe("a machine credentialled the way mint-grant leaves it", () => {
     const d = diagnose(env, project);
 
     expect(d.servers.map((s) => s.name)).toEqual([
-      "catalog",
-      "catalog-product-manager",
-      "catalog-engineer",
-      "catalog-quality-assurance",
+      "backlog",
+      "backlog-product-manager",
+      "backlog-engineer",
+      "backlog-quality-assurance",
     ]);
     for (const server of d.servers) expect(server.outcome).not.toContain("NOTHING");
     // The thing a reader cannot otherwise find out without reading stdio.ts.
@@ -127,7 +127,7 @@ describe("a machine credentialled the way mint-grant leaves it", () => {
 
   test("sends the reader to whoami, because the local half is all it can check", () => {
     const { env, project } = granted();
-    expect(diagnose(env, project).nextStep).toContain("catalog_whoami");
+    expect(diagnose(env, project).nextStep).toContain("backlog_whoami");
   });
 });
 
@@ -135,7 +135,7 @@ describe("the states it exists to name", () => {
   test("a bare api_key and no grant: the pinned servers get nothing, and it says why", () => {
     const home = dir();
     const project = dir();
-    writeJson(home, "config.json", { api_url: "https://catalog.example", api_key: SECRET });
+    writeJson(home, "config.json", { api_url: "https://backlog.example", api_key: SECRET });
 
     const d = diagnose({ SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }, project);
 
@@ -151,7 +151,7 @@ describe("the states it exists to name", () => {
   test("an unexpanded ${...} placeholder is reported, not silently ignored", () => {
     const home = dir();
     const project = dir();
-    writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET });
+    writeJson(home, "orchestrator.json", { api_url: "https://backlog.example", grant: SECRET });
 
     // 0.6.0 shipped with all four servers in this state, and back then the
     // variable really did beat the file. withoutUnexpandedPlaceholders ended
@@ -181,7 +181,7 @@ describe("the states it exists to name", () => {
   test("a wholly unexported environment is not a machine with problems", () => {
     const home = dir();
     const project = dir();
-    writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET });
+    writeJson(home, "orchestrator.json", { api_url: "https://backlog.example", grant: SECRET });
     writeJson(project, "product.json", { product_key: "reelmates" }, 0o644);
 
     const d = diagnose(
@@ -202,10 +202,10 @@ describe("the states it exists to name", () => {
 
     expect(d.problems).toEqual([]);
     expect(d.nextStep).not.toContain("Fix the problems");
-    expect(d.nextStep).toContain("catalog_whoami");
+    expect(d.nextStep).toContain("backlog_whoami");
   });
 
-  test("a test credential against a live catalogue — valid apart, wrong together", () => {
+  test("a test credential against a live backlog — valid apart, wrong together", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "config.json", {
@@ -234,7 +234,7 @@ describe("the states it exists to name", () => {
     const project = dir();
     const soon = new Date(Date.now() + 5 * 86_400_000).toISOString();
     writeJson(home, "orchestrator.json", {
-      api_url: "https://catalog.example",
+      api_url: "https://backlog.example",
       grant: SECRET,
       expires_at: soon,
     });
@@ -251,7 +251,7 @@ describe("the states it exists to name", () => {
     const home = dir();
     const project = dir();
     writeJson(home, "orchestrator.json", {
-      api_url: "https://catalog.example",
+      api_url: "https://backlog.example",
       grant: SECRET,
       expires_at: new Date(Date.now() + 80 * 86_400_000).toISOString(),
     });
@@ -267,7 +267,7 @@ describe("the states it exists to name", () => {
   test("a grant minted before 046 recorded no expiry, and that is silence not zero", () => {
     const home = dir();
     const project = dir();
-    writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET });
+    writeJson(home, "orchestrator.json", { api_url: "https://backlog.example", grant: SECRET });
 
     const d = diagnose({ SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }, project);
 
@@ -278,7 +278,7 @@ describe("the states it exists to name", () => {
   test("a world-readable credential file is a problem with a command attached", () => {
     const home = dir();
     const project = dir();
-    writeJson(home, "orchestrator.json", { api_url: "https://catalog.example", grant: SECRET }, 0o644);
+    writeJson(home, "orchestrator.json", { api_url: "https://backlog.example", grant: SECRET }, 0o644);
 
     const d = diagnose({ SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }, project);
     expect(d.problems.join("\n")).toContain("chmod 600");

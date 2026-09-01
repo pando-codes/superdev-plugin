@@ -14,8 +14,8 @@ Goal: Turn ideas into fully completed specifications of User Stories, Features, 
 
 ## Precondition
 
-The catalog must already hold a Product and its Capabilities.  Check before you start: if the
-`product` table is empty, stop and use superdev:init first — it bootstraps the catalog from the
+The backlog must already hold a Product and its Capabilities.  Check before you start: if the
+`product` table is empty, stop and use superdev:init first — it bootstraps the backlog from the
 existing project or by interview.  Come back here once it has.
 
 ## Grounding Process
@@ -41,7 +41,7 @@ existing project or by interview.  Come back here once it has.
 
 ## Review the design with existing user stories
 
-- Read the existing User Stories from the catalog, following `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`, scoped to this repository's product by `story.product_id`
+- Read the existing User Stories from the backlog, following `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`, scoped to this repository's product by `story.product_id`
 - Compare the newly made user story (or user stories) with existing user stories.  
 - If they are similar, consolidate into an existing user story (you can update pre-existing user stories if needed).  
 - If they are not similar, stick with creating a new user story.  Raise a flag to the user if there is ambiguity or uncertainty about the user story.
@@ -49,7 +49,7 @@ existing project or by interview.  Come back here once it has.
 
 ## After new data objects are made
 
-- Write the validated User Stories to the catalog, following `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`, each carrying the `product_id` of this repository's product — a story is written before any Feature exists to link it, so its own `product_id` is the only thing that makes it findable
+- Write the validated User Stories to the backlog, following `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`, each carrying the `product_id` of this repository's product — a story is written before any Feature exists to link it, so its own `product_id` is the only thing that makes it findable
 - List all of the created User Stories, by `key`, and hand them off to superdev:plan
 
 ## Key Principles

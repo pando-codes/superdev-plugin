@@ -1,6 +1,6 @@
 ---
 name: work
-description: You MUST use this to run autonomously against the catalog work queue - claim work addressed to your role, do it, push progress, finish it, and take the next one. Use whenever asked to "pull work", "work the queue", "run the backlog", or to run unattended until there is nothing left.
+description: You MUST use this to run autonomously against the backlog work queue - claim work addressed to your role, do it, push progress, finish it, and take the next one. Use whenever asked to "pull work", "work the queue", "run the backlog", or to run unattended until there is nothing left.
 ---
 
 # Working the Queue
@@ -8,10 +8,10 @@ description: You MUST use this to run autonomously against the catalog work queu
 ## Overview
 
 Every other superdev skill starts with a person saying what to do. This one starts with the
-catalog saying it. You claim work addressed to your role, do it, report what happened, and take
+backlog saying it. You claim work addressed to your role, do it, report what happened, and take
 the next item — until the queue is empty or something stops you.
 
-**Announce at start:** "I'm using the Work skill to pull work from the catalog."
+**Announce at start:** "I'm using the Work skill to pull work from the backlog."
 
 **The core discipline:** *you do not decide what to work on.* Priority, ordering, and
 dependencies were decided when the work was filed. Claiming is the whole of your input into
@@ -24,7 +24,7 @@ nobody can coordinate with.
    this repository was never initialized — stop and say so; do not guess from the directory
    name.
 
-2. **Call `catalog_whoami`.** It answers three things you need before doing anything:
+2. **Call `backlog_whoami`.** It answers three things you need before doing anything:
    - `pando_role` — which queue is yours. You cannot work another one.
    - `writes.product_key` — the product this key may write, or `any`.
    - `agent_id` — the identity your claims are recorded under.
@@ -33,7 +33,7 @@ nobody can coordinate with.
    writes will land; they will not, and you will have burned the run discovering it.
 
 3. **If several agents share this session,** pass a distinct `agent_id` on every work tool
-   call. Without it they are one agent to the catalog and will release and finish each other's
+   call. Without it they are one agent to the backlog and will release and finish each other's
    items.
 
 ## The loop
@@ -41,7 +41,7 @@ nobody can coordinate with.
 ### 1. Claim
 
 ```
-catalog_claim_work  product_key=<key>  lease_seconds=<how long you expect this to take>
+backlog_claim_work  product_key=<key>  lease_seconds=<how long you expect this to take>
 ```
 
 **`claimed: null` is success.** It means your role's queue is empty. Report that plainly and
@@ -83,7 +83,7 @@ Which skill does the work depends on which role you hold:
 
 Those skills are the method. This skill is only the loop around them.
 
-**Heartbeat between steps.** Call `catalog_heartbeat_work` whenever a step finishes and before
+**Heartbeat between steps.** Call `backlog_heartbeat_work` whenever a step finishes and before
 anything long. A lapsed lease returns your item to the queue, and another agent picking it up
 is how the same work gets built twice.
 
@@ -93,7 +93,7 @@ happened, and claim again. Never push through it.
 
 ### 4. Push what is worth keeping
 
-`catalog_push_progress` writes a permanent note. Write few, and write them worth reading.
+`backlog_push_progress` writes a permanent note. Write few, and write them worth reading.
 
 - **`decision`** — the one that earns its place. A choice you made and *why*: why you rejected
   the obvious approach, which trade-off you took, what you found out that the brief did not
@@ -107,7 +107,7 @@ happened, and claim again. Never push through it.
 ### 5. Finish honestly
 
 ```
-catalog_finish_work  work_item_key=<key>  state=<done|blocked|open|cancelled>  outcome="<what happened>"
+backlog_finish_work  work_item_key=<key>  state=<done|blocked|open|cancelled>  outcome="<what happened>"
 ```
 
 **`done` is terminal and nothing reopens it.** Only use it when every criterion in
@@ -116,7 +116,7 @@ you wrote pass but the criterion says something you did not test. If you are not
 not done.
 
 **Finishing a work item is not a verdict.** It says you did the work; it does not say the
-criteria pass. That is `catalog_record_evaluation`, and it is deliberately not yours if your
+criteria pass. That is `backlog_record_evaluation`, and it is deliberately not yours if your
 role cannot call it — the agent that builds does not get to grade itself.
 
 **Release rather than hold.** An item you cannot make progress on is better given back with a
@@ -133,7 +133,7 @@ Stop and report — do not claim again — when any of these is true:
 - The queue returned `claimed: null`. **This is the normal ending.**
 - You have moved two consecutive items to `blocked`. Something upstream is wrong and more
   attempts will only produce more blocked items.
-- A tool refused you in a way `catalog_whoami` does not explain.
+- A tool refused you in a way `backlog_whoami` does not explain.
 - You were given an item limit and reached it.
 
 If no limit was given, ask for one before starting an unattended run, or default to **five

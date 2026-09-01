@@ -4,7 +4,7 @@
  * WHY THIS IS TESTED AT ALL, GIVEN IT IS "JUST READING A FILE"
  *
  * Because every failure mode of this function presents identically to the
- * person hitting it: the catalog_* tools are not in the session. A precedence
+ * person hitting it: the backlog_* tools are not in the session. A precedence
  * bug, a merge bug, and a missing file are the same symptom, several tools away
  * from the cause, and the only way to tell them apart is to have pinned the
  * behaviour here.
@@ -185,10 +185,10 @@ describe("one machine, several roles", () => {
     // invisible. The key is used, because refusing would break a working
     // single-key setup — but the warning names it.
     expect(config.apiKey).toBe("pcat_live_fallback");
-    expect(warnings.join(" ")).toContain("catalog_whoami");
+    expect(warnings.join(" ")).toContain("backlog_whoami");
   });
 
-  test("a role the catalogue does not define is refused, with the list", () => {
+  test("a role the backlog does not define is refused, with the list", () => {
     expect(() =>
       loadConfig(
         env({
@@ -198,7 +198,7 @@ describe("one machine, several roles", () => {
         }),
         scratch(),
       ),
-    ).toThrow(/not a role this catalogue defines/);
+    ).toThrow(/not a role this backlog defines/);
   });
 });
 
@@ -274,11 +274,11 @@ describe("who this process is in the queue", () => {
 
 describe("unexpanded placeholders in the environment", () => {
   /**
-   * The unpinned `catalog` server's half of the same defect. Its plugin.json
+   * The unpinned `backlog` server's half of the same defect. Its plugin.json
    * block declares SUPERDEV_ROLE, and an unexported one arrived as the literal
    * "${SUPERDEV_ROLE}" — which is not a role, so loadConfig threw, and every
    * tool in the session answered with `"${SUPERDEV_ROLE}" is not a role this
-   * catalogue defines`. The user had not named a role at all.
+   * backlog defines`. The user had not named a role at all.
    */
   test("a placeholder role is no role, rather than an invalid one", () => {
     const root = scratch();

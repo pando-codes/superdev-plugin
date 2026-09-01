@@ -1,14 +1,14 @@
 # superdev
 
 A Claude Code plugin that turns ideas into working code through gated stages, recording what was
-decided in the catalog backend (`apps/backend`) rather than in
+decided in the backlog backend (`apps/backend`) rather than in
 scattered prose — and then letting agents **pull that work back out**, one well-defined item at
 a time. Follows the principles of ATDD and the Agile SDLC.
 
-The plugin is self-contained: it ships the MCP server that reaches the catalog, so installing
+The plugin is self-contained: it ships the MCP server that reaches the backlog, so installing
 superdev is the whole setup bar a key.
 
-Two ways to use it. **Driven**, where you run the skills in order and the catalog records what
+Two ways to use it. **Driven**, where you run the skills in order and the backlog records what
 was decided. **Autonomous**, where agents claim work addressed to their role, do it, push
 updates, and take the next item — several of them at once, safely, because the queue lives in
 the database and a claim is an atomic lease.
@@ -25,13 +25,13 @@ init ──→ brainstorm ──→ plan ──→ execute ──→ evaluate
                             criterion not observable
 ```
 
-Autonomous, the catalog deciding:
+Autonomous, the backlog deciding:
 
 ```
         plan files work        ┌──────────── nothing ready ────────────┐
               │                │                                       │
               ▼                ▼                                       │
-   ┌──→  catalog_claim_work ───┴──→ read the brief ──→ do the work ──→ │
+   ┌──→  backlog_claim_work ───┴──→ read the brief ──→ do the work ──→ │
    │              (a lease)            (intent, stories, criteria)     │
    │                                          │                        │
    │                                    heartbeat ⟲                    │
@@ -41,7 +41,7 @@ Autonomous, the catalog deciding:
 
 | Skill | What it does | What it writes |
 |---|---|---|
-| **init** | Bootstraps an empty catalog — derives the Product and Capabilities from an existing project, or interviews you when it's fresh. Run once | `product`, `capability` |
+| **init** | Bootstraps an empty backlog — derives the Product and Capabilities from an existing project, or interviews you when it's fresh. Run once | `product`, `capability` |
 | **brainstorm** | Refines an idea one question at a time into User Stories | `story` |
 | **plan** | Turns stories into Features, links them to Capabilities, and writes the Acceptance Criteria that define *how*. May add `proposed` Capabilities, never scores them | `feature`, `acceptance_criterion`, links |
 | **recalibrate** | Scores the Capabilities — promotes `proposed` ones, rebalances VBO across the product, redraws boundaries, deprecates. The only skill that sets a `vbo` | `capability` |
@@ -49,9 +49,9 @@ Autonomous, the catalog deciding:
 | **evaluate** | Verifies every in-scope criterion against real test output, and gates the PR | `ac_evaluation` |
 | **work** | Runs the loop: claim work addressed to your role, do it, push progress, finish, next | `work_item`, `work_item_note` |
 
-`init` runs **exactly once per repository** to seed the catalog; everything downstream assumes a
+`init` runs **exactly once per repository** to seed the backlog; everything downstream assumes a
 Product and its Capabilities already exist. It refuses to run a second time — a second product
-would silently split the catalog, and nothing in the schema prevents it. Changing capabilities
+would silently split the backlog, and nothing in the schema prevents it. Changing capabilities
 after that is `recalibrate`'s job, which `plan` hands off to whenever an idea fits no existing
 capability.
 
@@ -67,7 +67,7 @@ before code.
 ## Pulling work
 
 ```
-catalog_claim_work  product_key=reelmates
+backlog_claim_work  product_key=reelmates
 ```
 
 What comes back is a **brief**, not a ticket: why this work exists now, how the author wants it
@@ -117,8 +117,8 @@ queue. Handing it `product-manager` — the only alternative before this role ex
 made the criteria a description of whatever it happened to build.
 
 On top of that, the server **only registers the tools your role can use**. An engineer key never
-sees `catalog_update_acceptance_criterion`. That is a surface, not a boundary: RLS is still what
-refuses, and if the catalog is unreachable at startup the full menu is offered and the database
+sees `backlog_update_acceptance_criterion`. That is a surface, not a boundary: RLS is still what
+refuses, and if the backlog is unreachable at startup the full menu is offered and the database
 refuses exactly as it always would. `SUPERDEV_ROLE` may narrow the surface, never widen it.
 
 The three shipped agents in `agents/` carry the same narrowing in their tool lists, so a
@@ -177,7 +177,7 @@ issues keys; it does not create accounts. If you want one:
 
 You get back an account with a product in it, and a walk through `init` if you want one.
 
-If you operate your own catalogue, a key is minted per holder with the owner database credential
+If you operate your own backlog, a key is minted per holder with the owner database credential
 this plugin deliberately does not hold:
 
 ```sh
@@ -191,7 +191,7 @@ revoking the old one.
 **With nothing configured the server still starts.** It registers every tool, and every one of
 them answers with the setup instructions — naming all three places it looked, on this machine —
 rather than doing anything. It holds no key, so it sends nothing anywhere. This is deliberate:
-the server used to exit, and a session with no `catalog_*` tools in it is indistinguishable from
+the server used to exit, and a session with no `backlog_*` tools in it is indistinguishable from
 a broken install, several steps from the cause, with the one message that would have explained
 it discarded by the process that wrote it. Tools that are present and complaining are a missing
 key; tools that are absent are a server that did not start at all.
@@ -230,7 +230,7 @@ schemas/                      the five entity JSON Schemas, served as MCP resour
 reference/                    the entity model — what a good record looks like
   user-story.md     capability.md    feature.md
   acceptance-criteria.md             clause.md
-  datastore.md      how to reach the catalog and what it will accept
+  datastore.md      how to reach the backlog and what it will accept
 skills/
   connect/                    getting a key into the right place, and checking it took
   init/  brainstorm/  plan/  execute/  evaluate/  recalibrate/  work/
@@ -253,7 +253,7 @@ pointing at.
 Said here rather than discovered later, because some of it decides whether this is a reasonable
 thing for you to depend on right now.
 
-- **The hosted catalogue is invite-only, and that is a technical fact rather than a marketing
+- **The hosted backlog is invite-only, and that is a technical fact rather than a marketing
   one.** Its schema has no account entity: a key is scoped to a *product*, and each account is
   provisioned by hand so that scoping lines up with a customer boundary. Self-serve signup opens
   when the account entity does, and not before.
@@ -263,9 +263,9 @@ thing for you to depend on right now.
   permits.
 - **One region, one machine, no SLO, no status page.** Every deploy is a short gap in service.
 - **No terms of service, privacy policy, or DPA yet.** They are being written. Until they exist,
-  do not put anything in the catalogue that would need them.
+  do not put anything in the backlog that would need them.
 
-## The catalog server
+## The backlog server
 
 `mcp/dist/stdio.js` is committed, and that is deliberate. A plugin installed from GitHub is a
 git checkout — no install step runs, so there is no `node_modules` for an import to resolve
@@ -295,11 +295,11 @@ runs on your machine. What that is worth being clear about:
 If you are evaluating this and that matters to you, say so in an access request and you will get
 the commit and the lockfile to check against.
 
-It holds **one API key per role** and speaks HTTPS to the catalog API. It holds no database credential:
+It holds **one API key per role** and speaks HTTPS to the backlog API. It holds no database credential:
 a local plugin is the least trustworthy link in the chain, so compromising it yields a key
 scoped to a single role and revocable with one `UPDATE`, not a Postgres login. Authority is
 decided by the database — your key carries one role, and a refusal is a normal answer rather
-than a fault. Ask `catalog_whoami` when a write is refused.
+than a fault. Ask `backlog_whoami` when a write is refused.
 
 ### Working on it
 
@@ -320,6 +320,6 @@ here is what belongs to this repository: which request each tool produces.
 
 ### Known model divergence
 
-`reference/*.md` describes a slightly richer model than the catalog stores — the **Clause**
+`reference/*.md` describes a slightly richer model than the backlog stores — the **Clause**
 index, which has no record type. `reference/datastore.md` records it in full. Where they
-disagree, the catalog wins, because it is the thing that accepts the write.
+disagree, the backlog wins, because it is the thing that accepts the write.

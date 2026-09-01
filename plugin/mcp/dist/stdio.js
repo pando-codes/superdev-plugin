@@ -21893,7 +21893,7 @@ class ApiError extends Error {
   }
 }
 
-class CatalogClient {
+class BacklogClient {
   #baseUrl;
   #apiKey;
   #agentId;
@@ -22068,7 +22068,7 @@ function roleFrom(raw) {
   if (raw === undefined)
     return;
   if (!isRole(raw)) {
-    throw new ConfigError(`"${raw}" is not a role this catalogue defines. Known roles: ${ROLES.join(", ")}.`);
+    throw new ConfigError(`"${raw}" is not a role this backlog defines. Known roles: ${ROLES.join(", ")}.`);
   }
   return raw;
 }
@@ -22112,7 +22112,7 @@ function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
   }
   const apiKey = keyFromEnv.value ?? keyed ?? str(merged.api_key);
   if (declaredRole !== undefined && keyed === undefined && keyFromEnv.value === undefined) {
-    warnings.push(`role "${declaredRole}" was requested but no keys.${declaredRole} is configured, ` + "so the default api_key is being used. Its ACTUAL authority is whatever that key " + "carries — ask catalog_whoami rather than assuming the requested role was honoured.");
+    warnings.push(`role "${declaredRole}" was requested but no keys.${declaredRole} is configured, ` + "so the default api_key is being used. Its ACTUAL authority is whatever that key " + "carries — ask backlog_whoami rather than assuming the requested role was honoured.");
   }
   if (!apiUrl || !apiKey) {
     const missing = [!apiUrl && "api_url", !apiKey && "api_key"].filter(Boolean).join(" and ");
@@ -22129,14 +22129,14 @@ function loadConfig(rawEnv = process.env, cwd = process.cwd()) {
 ` + `    "keys": { "engineer": "pcat_live_...", "product-manager": "pcat_live_..." }
 ` + `  }
 
-` + grantSituation(env) + `If you have an account on the hosted catalogue, issue yourself a key:
+` + grantSituation(env) + `If you have an account on the hosted backlog, issue yourself a key:
 ` + `  ${PORTAL_URL}
 
-` + `The catalogue is invite-only while it is in beta. If you do not have an
+` + `The backlog is invite-only while it is in beta. If you do not have an
 ` + `account yet, ask for one:
 ` + `  ${ACCESS_REQUEST_URL}
 
-` + `If you run your own catalogue, a key is minted with the owner database
+` + `If you run your own backlog, a key is minted with the owner database
 ` + `credential this plugin deliberately does not hold:
 ` + `  cd apps/backend && DATABASE_URL=... bun run mint-key \\
 ` + `      --role agent_engineer --label "<who>" --product <product>`);
@@ -22225,7 +22225,7 @@ function pinnedRoleOf(env) {
   if (raw === undefined)
     return;
   if (!isRole(raw)) {
-    throw new ConfigError(`SUPERDEV_PINNED_ROLE is "${raw}", which is not a role this catalogue defines. ` + `Known roles: ${ROLES.join(", ")}. This is set by plugin.json, so a bad value ` + `here is a packaging bug rather than anything you can fix in a config file.`);
+    throw new ConfigError(`SUPERDEV_PINNED_ROLE is "${raw}", which is not a role this backlog defines. ` + `Known roles: ${ROLES.join(", ")}. This is set by plugin.json, so a bad value ` + `here is a packaging bug rather than anything you can fix in a config file.`);
   }
   return raw;
 }
@@ -22265,14 +22265,14 @@ function loadGrant(pinnedRole, rawEnv = process.env, cwd = process.cwd()) {
 ` + `needs nothing but the account you already sign in with:
 ` + `  ${PORTAL_URL}
 
-` + `If you run your own catalogue, mint one with the owner database credential this
+` + `If you run your own backlog, mint one with the owner database credential this
 ` + `plugin deliberately does not hold:
 ` + `  cd apps/backend && DATABASE_URL=... bun run mint-grant \\
 ` + `      --org <account> --label "<this machine>" \\
 ` + `      --roles agent_engineer,agent_quality_assurance,agent_product_manager
 
 ` + `Until then this server offers its tools and refuses every call. The single-key
-` + `arrangement still works: the unpinned "catalog" server reads config.json exactly
+` + `arrangement still works: the unpinned "backlog" server reads config.json exactly
 ` + `as it always has.`);
   }
   if (!apiUrl) {
@@ -22362,7 +22362,7 @@ async function registerAgent(config2, fetchImpl = globalThis.fetch, timeoutMs = 
   const body = await response.json();
   const apiKey = str2(body.api_key);
   if (!apiKey) {
-    throw new RegistrationError("the catalogue accepted the registration but returned no key", response.status);
+    throw new RegistrationError("the backlog accepted the registration but returned no key", response.status);
   }
   return {
     apiKey,
@@ -22404,7 +22404,7 @@ async function provisionProduct(apiUrl, grant, input, fetchImpl = globalThis.fet
   const body = await response.json();
   const productKey = str2(body.product_key);
   if (!productKey) {
-    throw new RegistrationError("the catalogue accepted the request but named no product", response.status);
+    throw new RegistrationError("the backlog accepted the request but named no product", response.status);
   }
   return {
     productKey,
@@ -29872,14 +29872,14 @@ function writeProductBinding(productPath, productKey, repo) {
 // mcp/src/bootstrap.ts
 function createBootstrapServer(options) {
   const remote = originRemote(options.projectDir);
-  const server = new McpServer({ name: "superdev-catalog", version: "0.1.0" }, {
+  const server = new McpServer({ name: "superdev-backlog", version: "0.1.0" }, {
     instructions: "THIS REPOSITORY IS NOT BOUND TO A PRODUCT YET, and this server holds no key " + "because of it — a key is minted for a product, and there is not one to mint " + `against.
 
-` + "This machine's grant can create it. Call catalog_bind_repository once, with the " + "product this repository is. Everything else in the catalogue stays unavailable " + "until the session is reloaded afterwards, because the servers resolve their " + `credentials at startup.
+` + "This machine's grant can create it. Call backlog_bind_repository once, with the " + "product this repository is. Everything else in the backlog stays unavailable " + "until the Claude Code session is restarted afterwards — /reload-plugins is not " + "enough, it does not restart MCP servers — because they resolve their credentials " + `at startup.
 
 ` + (remote === undefined ? "This checkout reports no git remote, so the product will be created without " + "one. That works, and it means nothing stops a second machine creating a " + "SECOND product for the same code." : `The repository will be recorded as ${remote}, read from this checkout rather ` + "than from anything a caller types — so a second machine cloning it is handed " + "this same product instead of making another.")
   });
-  server.registerTool("catalog_bind_repository", {
+  server.registerTool("backlog_bind_repository", {
     title: "Bind this repository to a product",
     description: "Create the product this repository is, in this machine's account, and write the " + `binding at .superdev/product.json. Call this once.
 
@@ -29887,7 +29887,7 @@ function createBootstrapServer(options) {
 
 ` + "The key is permanent. There is no tool anywhere in this system to rename or delete " + "a product, because its key scopes every capability, feature, story, and criterion " + `underneath it. Usually the repository name; agonise over the display name less.
 
-` + "AFTER THIS SUCCEEDS the session must be reloaded before any catalogue tool works: " + "this server resolved its credentials at startup and cannot re-register itself " + "mid-session. Say so plainly to the user rather than retrying.",
+` + "AFTER THIS SUCCEEDS the Claude Code session must be restarted before any backlog " + "tool works, and /reload-plugins is not enough because it does not restart MCP " + "servers: this server resolved its credentials at startup and cannot re-register " + "itself mid-session. Say so plainly to the user rather than retrying.",
     inputSchema: {
       product_key: exports_external.string().regex(/^[a-z0-9][a-z0-9-]*$/, "lowercase kebab-case, e.g. 'reelmates'. Permanent — it scopes every row underneath it.").describe("kebab-case slug, globally unique. Permanent."),
       name: exports_external.string().min(1).describe("Display name, e.g. 'ReelMates'.")
@@ -29905,11 +29905,11 @@ function createBootstrapServer(options) {
         content: [
           {
             type: "text",
-            text: (product.created ? `Created product "${product.productKey}" (${product.name}).` : `This repository is already catalogued as "${product.productKey}" ` + `(${product.name}) — joined it rather than creating a second one.`) + `
+            text: (product.created ? `Created product "${product.productKey}" (${product.name}).` : `This repository is already recorded as "${product.productKey}" ` + `(${product.name}) — joined it rather than creating a second one.`) + `
 
 Wrote ${options.productPath}. COMMIT IT: the binding is a fact about ` + `the repository, not a local preference, and a colleague's checkout needs ` + `it too.
 
-` + `Reload the session for the catalogue tools to work — the servers resolve ` + `their credentials at startup, so this one is still holding none.`
+` + `Restart the Claude Code session for the backlog tools to work — ` + `/reload-plugins is not enough, it does not restart MCP servers. They resolve ` + `their credentials at startup, so this one is still holding none.`
           }
         ]
       };
@@ -29922,7 +29922,7 @@ Wrote ${options.productPath}. COMMIT IT: the binding is a fact about ` + `the re
             type: "text",
             text: `Could not create the product: ${detail}` + (forbidden ? `
 
-This machine's grant exists and may not create products — that is a ` + `ceiling on the grant itself (040), so the fix is a grant minted with ` + `--may-create-products, not a change here. Only the person holding the ` + `catalogue's owner credential can issue one.` : "")
+This machine's grant exists and may not create products — that is a ` + `ceiling on the grant itself (040), so the fix is a grant minted with ` + `--may-create-products, not a change here. Only the person holding the ` + `backlog's owner credential can issue one.` : "")
           }
         ],
         isError: true
@@ -29941,7 +29941,7 @@ function workspaceRoot() {
 // mcp/src/doctor.ts
 import { existsSync as existsSync4, readFileSync as readFileSync3, statSync as statSync3 } from "node:fs";
 
-// ../../packages/catalog-keys/src/index.ts
+// ../../packages/backlog-keys/src/index.ts
 var KEY_PREFIX_LENGTH = 14;
 var KEY_PATTERN = /^pcat_(live|test)_[A-Za-z0-9_-]{43}$/;
 function keyPrefix(key) {
@@ -30076,15 +30076,15 @@ function diagnose(rawEnv = process.env, cwd = process.cwd(), defaultRole = "prod
   const roleKey = (role) => creds.some((c) => c.source.endsWith(`keys.${role}`));
   const servers = [];
   servers.push({
-    name: "catalog",
+    name: "backlog",
     outcome: bareKey !== undefined ? "a configured api_key" : haveGrant ? `a key derived from the grant, as "${declaredRole ?? defaultRole}"` : "NOTHING — it will report setup instructions",
-    detail: bareKey === undefined && haveGrant && declaredRole === undefined ? `no role is declared, so it defaults to "${defaultRole}"` : bareKey === undefined && haveGrant && !productFile.present ? "this repository has no product binding, so it offers catalog_bind_repository only" : undefined
+    detail: bareKey === undefined && haveGrant && declaredRole === undefined ? `no role is declared, so it defaults to "${defaultRole}"` : bareKey === undefined && haveGrant && !productFile.present ? "this repository has no product binding, so it offers backlog_bind_repository only" : undefined
   });
   for (const role of PINNED) {
     servers.push({
-      name: `catalog-${role}`,
+      name: `backlog-${role}`,
       outcome: haveGrant ? "a key derived from the grant" : roleKey(role) ? `the configured keys.${role}` : "NOTHING — it will report setup instructions",
-      detail: haveGrant && !productFile.present ? role === "product-manager" ? "no product binding, so it offers catalog_bind_repository only" : "no product binding, so it cannot register" : !haveGrant && !roleKey(role) && bareKey !== undefined ? "a bare api_key is present and a pinned server will NOT use one" : undefined
+      detail: haveGrant && !productFile.present ? role === "product-manager" ? "no product binding, so it offers backlog_bind_repository only" : "no product binding, so it cannot register" : !haveGrant && !roleKey(role) && bareKey !== undefined ? "a bare api_key is present and a pinned server will NOT use one" : undefined
     });
   }
   const problems = [];
@@ -30101,7 +30101,7 @@ function diagnose(rawEnv = process.env, cwd = process.cwd(), defaultRole = "prod
       continue;
     }
     if (cred.environment === "test" && apiUrl !== undefined && !isLocal(apiUrl)) {
-      problems.push(`${cred.source} is a TEST credential but api_url is ${apiUrl}. A test key ` + `against a live catalogue is rejected as though it were invalid.`);
+      problems.push(`${cred.source} is a TEST credential but api_url is ${apiUrl}. A test key ` + `against a live backlog is rejected as though it were invalid.`);
     }
   }
   if (grantExpiryDays !== undefined && grantExpiryDays <= 30) {
@@ -30110,7 +30110,7 @@ function diagnose(rawEnv = process.env, cwd = process.cwd(), defaultRole = "prod
   if (apiUrl === undefined && (haveGrant || bareKey !== undefined)) {
     problems.push("a credential is configured but no api_url is, so nothing knows where to send it");
   }
-  const nextStep = !haveGrant && bareKey === undefined ? "This machine holds no credential. Install one — a grant is the one to want." : problems.length > 0 ? "Fix the problems above; they are local and none of them needs the catalogue." : !productFile.present ? `Nothing is wrong with the credentials. This repository is not bound to a ` + `product — run superdev:init, or call catalog_bind_repository.` : "Nothing is wrong locally. Call catalog_whoami to find out whether the " + "catalogue accepts this credential — that is the half this tool cannot answer.";
+  const nextStep = !haveGrant && bareKey === undefined ? "This machine holds no credential. Install one — a grant is the one to want." : problems.length > 0 ? "Fix the problems above; they are local and none of them needs the backlog." : !productFile.present ? `Nothing is wrong with the credentials. This repository is not bound to a ` + `product — run superdev:init, or call backlog_bind_repository.` : "Nothing is wrong locally. Call backlog_whoami to find out whether the " + "backlog accepts this credential — that is the half this tool cannot " + "answer. If whoami disagrees with the report above, this session started " + "before the files reached their current state: restart the Claude Code " + "session (/reload-plugins does not restart MCP servers).";
   return {
     files,
     environment,
@@ -30145,7 +30145,7 @@ function render(d) {
   lines.push("", "CREDENTIALS  (prefixes only — the rest is never displayed)");
   lines.push(d.credentials.length === 0 ? "  none found" : d.credentials.map((c) => `  ${mark(c.wellFormed)} ${c.prefix}…  ${c.source}`).join(`
 `));
-  lines.push("", "WHAT EACH SERVER WOULD RUN ON  (not verified against the catalogue)");
+  lines.push("", "WHAT EACH SERVER WOULD RUN ON AT NEXT START  (not verified against the backlog)", "  This reads the files as they are NOW. A server already running resolved its", "  credential at startup and may differ — backlog_whoami reports that one.");
   for (const s of d.servers) {
     lines.push(`  ${mark(!s.outcome.startsWith("NOTHING"))} ${s.name.padEnd(26)} ${s.outcome}`);
     if (s.detail !== undefined)
@@ -30157,7 +30157,7 @@ function render(d) {
       lines.push(`  ! ${p}`);
   }
   if (d.grantExpiresInDays !== undefined) {
-    lines.push("", `GRANT EXPIRY  ${d.grantExpiresInDays} days remaining (as recorded locally by ` + `mint-grant; the catalogue decides)`);
+    lines.push("", `GRANT EXPIRY  ${d.grantExpiresInDays} days remaining (as recorded locally by ` + `mint-grant; the backlog decides)`);
   }
   lines.push("", `NEXT: ${d.nextStep}`);
   return lines.join(`
@@ -30167,11 +30167,11 @@ function render(d) {
 // mcp/src/tools/diagnostics.ts
 var diagnosticTools = [
   {
-    name: "catalog_doctor",
-    title: "Diagnose this machine's catalogue setup",
-    description: "Report what credentials this machine holds, which files and environment variables " + "supplied them, and what each of the four catalog servers would run on. Call this " + "FIRST whenever a catalog tool answers with setup instructions, returns 401, or is " + "missing from the session — it turns 'something is wrong with superdev' into a named " + `file and a named fix.
+    name: "backlog_doctor",
+    title: "Diagnose this machine's backlog setup",
+    description: "Report what credentials this machine holds, which files and environment variables " + "supplied them, and what each of the four backlog servers would run on. Call this " + "FIRST whenever a backlog tool answers with setup instructions, returns 401, or is " + "missing from the session — it turns 'something is wrong with superdev' into a named " + `file and a named fix.
 
-` + "MAKES NO NETWORK CALL, deliberately: the states most worth diagnosing include a " + "catalogue that cannot be reached, and it answers in all of them. The half it cannot " + "answer is whether the catalogue ACCEPTS the credential — that is catalog_whoami, and " + `the report says so when nothing local is wrong.
+` + "MAKES NO NETWORK CALL, deliberately: the states most worth diagnosing include a " + "backlog that cannot be reached, and it answers in all of them. The half it cannot " + "answer is whether the backlog ACCEPTS the credential — that is backlog_whoami, and " + `the report says so when nothing local is wrong.
 
 ` + "Shows credential prefixes only. Show the output to the user: every fix it names is a " + "file on their machine and only they can apply it.",
     inputSchema: {},
@@ -30187,7 +30187,7 @@ var diagnosticTools = [
 // mcp/src/tools/evidence.ts
 var evidenceTools = [
   {
-    name: "catalog_record_evaluation",
+    name: "backlog_record_evaluation",
     title: "Record an evaluation",
     description: `Record one evaluation of one acceptance criterion. Requires quality-assurance or ci.
 
@@ -30211,11 +30211,11 @@ var evidenceTools = [
     }
   },
   {
-    name: "catalog_record_evidence",
+    name: "backlog_record_evidence",
     title: "Record an evidence window",
     description: `Record one signal kind across a product for one window. Requires revops or ci.
 
-` + "SEND A ROW FOR EVERY ACTIVE CAPABILITY, INCLUDING THOSE MEASURING ZERO. This is the " + "one instruction that matters here, because getting it wrong fails silently: a signal " + "kind participates in capability weighting only once it has FULL coverage for the " + "window, so a batch that skips zero-activity capabilities never reaches it. The kind " + "never participates, every weight tied to it stays null, and NOTHING ERRORS — rows land " + "and the pipeline looks healthy. Call catalog_list_capabilities with status=active first " + `and send one entry per key it returns.
+` + "SEND A ROW FOR EVERY ACTIVE CAPABILITY, INCLUDING THOSE MEASURING ZERO. This is the " + "one instruction that matters here, because getting it wrong fails silently: a signal " + "kind participates in capability weighting only once it has FULL coverage for the " + "window, so a batch that skips zero-activity capabilities never reaches it. The kind " + "never participates, every weight tied to it stays null, and NOTHING ERRORS — rows land " + "and the pipeline looks healthy. Call backlog_list_capabilities with status=active first " + `and send one entry per key it returns.
 
 ` + "An incomplete batch is refused and names what is missing. allow_partial overrides that " + `and is rarely the right answer.
 
@@ -30339,9 +30339,9 @@ function payloadFor(args) {
 }
 var linkTools = [
   {
-    name: "catalog_link",
+    name: "backlog_link",
     title: "Link two records",
-    description: `Create a link between two catalogue records. Requires product-manager.
+    description: `Create a link between two backlog records. Requires product-manager.
 
 ` + "Which fields are required depends on `kind` — see its description. Stories and " + "acceptance criteria are SIBLINGS under a feature, not parent and child: each links to " + "the feature independently, and there is no story-to-criterion link.",
     inputSchema: shape,
@@ -30351,7 +30351,7 @@ var linkTools = [
     }
   },
   {
-    name: "catalog_unlink",
+    name: "backlog_unlink",
     title: "Remove a link",
     description: `Remove a link. Requires product-manager.
 
@@ -30369,7 +30369,7 @@ var linkTools = [
 var productKey = exports_external.string().describe("Product slug, e.g. 'trenchcoat'.");
 var readTools = [
   {
-    name: "catalog_whoami",
+    name: "backlog_whoami",
     title: "Who is this key",
     description: "Report which Postgres role and pando_role this API key carries, and what the " + "database sees for the connection a request runs on. Call this first when a write " + "is unexpectedly refused: the answer says which role you actually hold.",
     inputSchema: {},
@@ -30377,15 +30377,15 @@ var readTools = [
     handler: async (client) => (await client.get("/v1/whoami")).body
   },
   {
-    name: "catalog_list_products",
+    name: "backlog_list_products",
     title: "List products",
-    description: "List every product in the catalogue.",
+    description: "List every product in the backlog.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
     handler: async (client) => (await client.get("/v1/products")).body
   },
   {
-    name: "catalog_list_capabilities",
+    name: "backlog_list_capabilities",
     title: "List capabilities",
     description: "List a product's capabilities. The capability set is the denominator for every " + "weight and coverage figure the model reports, so this is the partition, not a tag list.",
     inputSchema: {
@@ -30399,7 +30399,7 @@ var readTools = [
     }
   },
   {
-    name: "catalog_get_capability",
+    name: "backlog_get_capability",
     title: "Get a capability",
     description: "One capability with the features that serve it and its computed weight. " + "A null weight means 'not yet measurable', not 'worth nothing'.",
     inputSchema: {
@@ -30410,7 +30410,7 @@ var readTools = [
     handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/capabilities/${seg(args.capability_key)}`)).body
   },
   {
-    name: "catalog_list_features",
+    name: "backlog_list_features",
     title: "List features",
     description: "List a product's features. Only 'active' features count toward verification and " + "coverage, so lifecycle_state is worth reading rather than skimming.",
     inputSchema: {
@@ -30424,7 +30424,7 @@ var readTools = [
     }
   },
   {
-    name: "catalog_get_feature",
+    name: "backlog_get_feature",
     title: "Get a feature",
     description: "One feature with its stories, acceptance criteria, and verified state. Stories and " + "criteria are SIBLINGS under a feature, not parent and child — neither links through " + "the other.",
     inputSchema: {
@@ -30435,7 +30435,7 @@ var readTools = [
     handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/features/${seg(args.feature_key)}`)).body
   },
   {
-    name: "catalog_get_story",
+    name: "backlog_get_story",
     title: "Get a user story",
     description: "One user story with its derived confidence. Confidence decays from last_reviewed_at, " + "so an accurate story that looks stale is as misleading as the reverse. " + "Story keys are GLOBAL — no product is needed to address one.",
     inputSchema: { story_key: exports_external.string().describe("e.g. 'story_9f3k2a'.") },
@@ -30443,7 +30443,7 @@ var readTools = [
     handler: async (client, args) => (await client.get(`/v1/stories/${seg(args.story_key)}`)).body
   },
   {
-    name: "catalog_get_acceptance_criterion",
+    name: "backlog_get_acceptance_criterion",
     title: "Get an acceptance criterion",
     description: "One acceptance criterion with its latest evaluation. 'Never evaluated' is the ABSENCE " + "of an evaluation, not a third verdict. Criterion keys are GLOBAL.",
     inputSchema: { ac_key: exports_external.string().describe("e.g. 'ac_7bq1lm'.") },
@@ -30451,7 +30451,7 @@ var readTools = [
     handler: async (client, args) => (await client.get(`/v1/acceptance-criteria/${seg(args.ac_key)}`)).body
   },
   {
-    name: "catalog_model_health",
+    name: "backlog_model_health",
     title: "Model health",
     description: "Problems the model can detect in itself for one product — orphaned features, " + "partially populated signal kinds, overdue coverage reviews. The first thing to check " + "when a figure looks wrong.",
     inputSchema: { product_key: productKey },
@@ -30459,7 +30459,7 @@ var readTools = [
     handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/model-health`)).body
   },
   {
-    name: "catalog_coverage",
+    name: "backlog_coverage",
     title: "Coverage",
     description: "A product's weighted verified share, and how many of its capabilities carry no weight. " + "A high unweighted count makes the share unrepresentative.",
     inputSchema: { product_key: productKey },
@@ -30467,8 +30467,8 @@ var readTools = [
     handler: async (client, args) => (await client.get(`/v1/products/${seg(args.product_key)}/coverage`)).body
   },
   {
-    name: "catalog_public_catalog",
-    title: "Public catalogue",
+    name: "backlog_public_view",
+    title: "Public backlog",
     description: "The GTM projection: public capabilities with their public feature counts. This is the " + "view intended to reach customers, so its contents are a claim you are making publicly.",
     inputSchema: { product_key: productKey },
     annotations: { readOnlyHint: true },
@@ -30600,7 +30600,7 @@ async function drain(client, home, stream) {
       } catch (error51) {
         failedGroups.add(key);
         const where = productKey2 === "" ? asAgent ?? "this agent" : productKey2;
-        problem ??= error51 instanceof ApiError ? `${where}: the catalogue answered ${error51.status} (${error51.message})` : `${where}: ${error51 instanceof Error ? error51.message : String(error51)}`;
+        problem ??= error51 instanceof ApiError ? `${where}: the backlog answered ${error51.status} (${error51.message})` : `${where}: ${error51 instanceof Error ? error51.message : String(error51)}`;
         break;
       }
     }
@@ -30622,17 +30622,17 @@ async function drain(client, home, stream) {
 }
 
 // mcp/src/tools/tenants.ts
-var SUBJECT_HELP = "Optional. What this is ABOUT, as a namespaced reference: " + "'superdev:delivery/work_item/wi_a1b2c3', 'local:agent-suite/work-item/wi_a1b2c3'. " + "A bare 'wi_a1b2c3' is REFUSED — two systems mint that shape over different id " + "spaces, and an unnamespaced reference is ambiguous between them. The target is " + "never verified: it may live in a tenant this catalogue does not have.";
+var SUBJECT_HELP = "Optional. What this is ABOUT, as a namespaced reference: " + "'superdev:delivery/work_item/wi_a1b2c3', 'local:agent-suite/work-item/wi_a1b2c3'. " + "A bare 'wi_a1b2c3' is REFUSED — two systems mint that shape over different id " + "spaces, and an unnamespaced reference is ambiguous between them. The target is " + "never verified: it may live in a tenant this backlog does not have.";
 var subject = exports_external.string().optional().describe(SUBJECT_HELP);
 var tenantTools = [
   {
-    name: "catalog_send_message",
+    name: "backlog_send_message",
     title: "Send a message to another agent",
     description: "Send one message to one named agent. Requires the `correspondence` tenant.\n\n" + "ONE RECIPIENT. To reach two agents, send two messages. Asking one agent to pass " + "something on loses the record that the second was told, and makes the sender's account " + `of what happened depend on a third party doing something it was never asked to do.
 
-` + "WRITES LOCALLY FIRST and drains to the catalogue afterwards, so this succeeds with no " + "network. The answer says whether it has reached the catalogue yet; if it has not, it " + `will on the next drain and nothing is lost.
+` + "WRITES LOCALLY FIRST and drains to the backlog afterwards, so this succeeds with no " + "network. The answer says whether it has reached the backlog yet; if it has not, it " + `will on the next drain and nothing is lost.
 
-` + "This is for JUDGMENT — an opinion, an escalation, a question, a heads-up. A request " + "that is a UNIT OF WORK belongs in the queue instead: file it with catalog_file_work so " + "it can be claimed, leased, and judged against criteria. A message asking someone to " + "build something is a message nobody is accountable for.",
+` + "This is for JUDGMENT — an opinion, an escalation, a question, a heads-up. A request " + "that is a UNIT OF WORK belongs in the queue instead: file it with backlog_file_work so " + "it can be claimed, leased, and judged against criteria. A message asking someone to " + "build something is a message nobody is accountable for.",
     inputSchema: {
       product_key: exports_external.string().describe("Which product's correspondence this belongs to."),
       recipient: exports_external.string().describe("The agent this is addressed to, e.g. 'quality-assurance'."),
@@ -30654,9 +30654,9 @@ var tenantTools = [
     }
   },
   {
-    name: "catalog_read_messages",
+    name: "backlog_read_messages",
     title: "Read messages",
-    description: "Read correspondence in a product, newest first. Requires the `correspondence` tenant.\n\n" + "Reads the CATALOGUE, not the local journal, so a message this machine has journalled " + "but not yet drained will not appear. Call catalog_drain_journal first if you have just " + `sent something and need to see it here.
+    description: "Read correspondence in a product, newest first. Requires the `correspondence` tenant.\n\n" + "Reads the BACKLOG, not the local journal, so a message this machine has journalled " + "but not yet drained will not appear. Call backlog_drain_journal first if you have just " + `sent something and need to see it here.
 
 ` + "Not restricted to messages addressed to you: reconstructing what happened between two " + "other agents is a normal thing to need, and a report that could only see its own inbox " + "would be wrong about everything else.",
     inputSchema: {
@@ -30680,7 +30680,7 @@ var tenantTools = [
     }
   },
   {
-    name: "catalog_record_decision",
+    name: "backlog_record_decision",
     title: "Record a decision",
     description: "Record one ruling on one question. Requires the `decision` tenant AND a Head role — " + `every other role is refused by the database, and that refusal is the point.
 
@@ -30688,7 +30688,7 @@ var tenantTools = [
 
 ` + "APPEND-ONLY. A ruling that turns out to be wrong is superseded by a NEWER one with " + "disposition 'superseded' or a fresh verdict; nothing is edited, because the history of " + `what was believed when is what makes the record worth keeping.
 
-` + "You may not rule on your own request. `requested_by` must be somebody else.\n\n" + "Writes locally first and drains afterwards, exactly as catalog_send_message does.",
+` + "You may not rule on your own request. `requested_by` must be somebody else.\n\n" + "Writes locally first and drains afterwards, exactly as backlog_send_message does.",
     inputSchema: {
       product_key: exports_external.string(),
       key: exports_external.string().describe("'dec_' plus exactly six lowercase alphanumerics, e.g. 'dec_7bq1lm'. Global."),
@@ -30714,7 +30714,7 @@ var tenantTools = [
     }
   },
   {
-    name: "catalog_read_decisions",
+    name: "backlog_read_decisions",
     title: "Read decisions",
     description: "Read rulings in a product, newest first. Requires the `decision` tenant.\n\n" + "Open to every role, not only Heads: a decision binds the agents who did not make it, " + `and one they cannot read is one they cannot follow.
 
@@ -30738,13 +30738,13 @@ var tenantTools = [
     }
   },
   {
-    name: "catalog_drain_journal",
+    name: "backlog_drain_journal",
     title: "Drain the local journal",
     description: `Send everything this machine has journalled but not yet delivered.
 
-` + "Sends, decisions, and progress notes already drain themselves, so this is for the case " + "where that " + "failed: the catalogue was unreachable, the key was not yet configured, or the tenant " + "was not enabled at the time. Call it after fixing any of those, or when you want to " + `know whether anything is still waiting.
+` + "Sends, decisions, and progress notes already drain themselves, so this is for the case " + "where that " + "failed: the backlog was unreachable, the key was not yet configured, or the tenant " + "was not enabled at the time. Call it after fixing any of those, or when you want to " + `know whether anything is still waiting.
 
-` + "Safe to call repeatedly and safe to call when there is nothing to do. Delivery is " + "AT-LEAST-ONCE: a record the catalogue already has is reported as a duplicate and " + "written again by nobody. `still_pending` above zero means something is still waiting, " + "and `problem` says what stopped it.",
+` + "Safe to call repeatedly and safe to call when there is nothing to do. Delivery is " + "AT-LEAST-ONCE: a record the backlog already has is reported as a duplicate and " + "written again by nobody. `still_pending` above zero means something is still waiting, " + "and `problem` says what stopped it.",
     inputSchema: {
       stream: exports_external.enum(["correspondence", "decision", "work-progress"]).optional().describe("Which journal. Omitted drains all three.")
     },
@@ -30759,13 +30759,13 @@ var tenantTools = [
     }
   },
   {
-    name: "catalog_journal_status",
+    name: "backlog_journal_status",
     title: "What is waiting in the local journal",
-    description: `How many records this machine has journalled, and how many have reached the catalogue.
+    description: `How many records this machine has journalled, and how many have reached the backlog.
 
-` + "Touches no network, so it answers while the catalogue is down — which is exactly when " + "'has anything been lost?' is worth asking. Nothing has: `pending` is what is still on " + `disk waiting, and catalog_drain_journal is what moves it.
+` + "Touches no network, so it answers while the backlog is down — which is exactly when " + "'has anything been lost?' is worth asking. Nothing has: `pending` is what is still on " + `disk waiting, and backlog_drain_journal is what moves it.
 
-` + "The journal is this MACHINE's outbox, not shared state — anything drained already lives " + "in the catalogue, and the cursor is per-machine. `.superdev/journal/` belongs in the " + "workspace's .gitignore; committing it makes two checkouts disagree about what has been " + "sent.",
+` + "The journal is this MACHINE's outbox, not shared state — anything drained already lives " + "in the backlog, and the cursor is per-machine. `.superdev/journal/` belongs in the " + "workspace's .gitignore; committing it makes two checkouts disagree about what has been " + "sent.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
     handler: async (_client, _args) => {
@@ -30783,7 +30783,7 @@ var tenantTools = [
 ];
 
 // mcp/src/tools/work.ts
-var agentIdField = exports_external.string().min(1).max(64).optional().describe("Who is acting, if not this server's configured identity. Pass a distinct id " + "when several agents share one session — otherwise they are the same agent to " + "the catalogue and can release or finish each other's work by accident. It " + "changes WHO holds a claim, never WHAT this key is allowed to do.");
+var agentIdField = exports_external.string().min(1).max(64).optional().describe("Who is acting, if not this server's configured identity. Pass a distinct id " + "when several agents share one session — otherwise they are the same agent to " + "the backlog and can release or finish each other's work by accident. It " + "changes WHO holds a claim, never WHAT this key is allowed to do.");
 var productKey2 = exports_external.string().describe("Product slug, from .superdev/product.json.");
 var workItemKey = exports_external.string().regex(/^wi_[a-z0-9]{6}$/, "wi_ followed by exactly six lowercase alphanumerics").describe("Work item key, e.g. wi_a1b2c3.");
 async function serverOnly(what, run) {
@@ -30797,13 +30797,13 @@ async function serverOnly(what, run) {
       operation: what,
       reason: error51 instanceof Error ? error51.message : String(error51),
       explanation: `${what} cannot be done offline and cannot be journalled: it is the queue's mutual ` + "exclusion, and two agents resolving that after the fact would mean discarding work " + "somebody already did.",
-      what_you_can_still_do: "Keep working the item you already hold, and keep calling catalog_push_progress — " + "notes are append-only and journal locally, so they will land when the catalogue is " + "reachable again, even if this lease has expired by then. Do not take new work."
+      what_you_can_still_do: "Keep working the item you already hold, and keep calling backlog_push_progress — " + "notes are append-only and journal locally, so they will land when the backlog is " + "reachable again, even if this lease has expired by then. Do not take new work."
     };
   }
 }
 var workTools = [
   {
-    name: "catalog_claim_work",
+    name: "backlog_claim_work",
     title: "Claim the next work item",
     description: "Take the next piece of work addressed to THIS KEY'S ROLE in the given product, " + `and get the whole brief back in the same answer.
 
@@ -30813,7 +30813,7 @@ var workTools = [
 
 ` + "2. WORK IS ADDRESSED TO A ROLE, and the role is your key's — you cannot ask for " + "another role's queue. An engineer will never be handed a quality-assurance item " + "even if it is the highest priority thing in the product. That is the design, not " + `a misconfiguration.
 
-` + "3. THE CLAIM IS A LEASE, not an assignment. It expires. Call " + "`catalog_heartbeat_work` while you work, and treat a lost lease as a full stop: " + "another agent may already have taken the item.",
+` + "3. THE CLAIM IS A LEASE, not an assignment. It expires. Call " + "`backlog_heartbeat_work` while you work, and treat a lost lease as a full stop: " + "another agent may already have taken the item.",
     inputSchema: {
       product_key: productKey2,
       lease_seconds: exports_external.number().int().min(30).max(86400).optional().describe("How long you are claiming it for, default 900. Ask for roughly how long " + "you expect the work to take and heartbeat rather than asking for hours: a " + "long lease on an agent that dies keeps the item out of the queue for that " + "whole time."),
@@ -30826,7 +30826,7 @@ var workTools = [
     }
   },
   {
-    name: "catalog_list_work",
+    name: "backlog_list_work",
     title: "List the work queue",
     description: "See the queue without taking anything from it. Read-only, and it shows EVERY " + "role's work, not just yours — useful for reporting on what is outstanding and " + `for seeing what is blocked on whom.
 
@@ -30856,7 +30856,7 @@ var workTools = [
     }
   },
   {
-    name: "catalog_get_work",
+    name: "backlog_get_work",
     title: "Read a work item's brief",
     description: "The full brief for one work item — the same payload a claim returns, without " + "claiming anything. Use it to re-read your instructions mid-task, to check " + "whether an item you were about to start is still held by someone, or to read " + "the notes another agent left before you picked up its handoff.",
     inputSchema: { work_item_key: workItemKey },
@@ -30864,9 +30864,9 @@ var workTools = [
     handler: async (client, args) => (await client.get(`/v1/work-items/${seg(args.work_item_key)}`)).body
   },
   {
-    name: "catalog_heartbeat_work",
+    name: "backlog_heartbeat_work",
     title: "Extend your lease",
-    description: "Tell the catalogue you are still working on an item you hold, pushing its lease " + `out.
+    description: "Tell the backlog you are still working on an item you hold, pushing its lease " + `out.
 
 ` + "Call this whenever a step finishes and before anything long. A lapsed lease " + "returns the item to the queue, and another agent taking it is how the same work " + `gets done twice.
 
@@ -30882,7 +30882,7 @@ var workTools = [
     }
   },
   {
-    name: "catalog_push_progress",
+    name: "backlog_push_progress",
     title: "Push a progress note",
     description: "Append a note to a work item you are holding. Notes are permanent and cannot be " + "edited — a note is what you observed at a moment, and one that could be revised " + `afterwards would be evidence of nothing.
 
@@ -30915,7 +30915,7 @@ var workTools = [
     }
   },
   {
-    name: "catalog_finish_work",
+    name: "backlog_finish_work",
     title: "Finish, block, or release a work item",
     description: "Move an item you hold out of `claimed`, and say what happened. The outcome is " + "required for everything except a release, and it is read by whoever picks up " + `what you left.
 
@@ -30928,7 +30928,7 @@ var workTools = [
 ` + `              judgement; if you are the one building it, prefer blocked and say
 ` + `              why, and let the planner decide.
 
-` + "RECORDING A VERDICT IS A DIFFERENT ACT. Finishing a work item says you did the " + "work; it does not say the criteria pass. That is `catalog_record_evaluation`, " + "and deliberately not yours if your role cannot call it.",
+` + "RECORDING A VERDICT IS A DIFFERENT ACT. Finishing a work item says you did the " + "work; it does not say the criteria pass. That is `backlog_record_evaluation`, " + "and deliberately not yours if your role cannot call it.",
     inputSchema: {
       work_item_key: workItemKey,
       state: exports_external.enum(["done", "blocked", "open", "cancelled"]),
@@ -30941,14 +30941,14 @@ var workTools = [
     }
   },
   {
-    name: "catalog_file_work",
+    name: "backlog_file_work",
     title: "File a work item",
     description: "Put a piece of work on the queue for a role to pick up. Requires product-manager " + "or head-of-engineering — an agent that could file its own work would have a " + `to-do list rather than a backlog.
 
 ` + "THE QUALITY BAR, WHICH THE DATABASE CANNOT ENFORCE. A work item whose intent " + "reads 'improve things' satisfies every constraint in the schema and is worthless " + `to the agent that claims it. What you write here IS the briefing:
 
 ` + `  title    — one line, what will be true when this is done. Not a topic.
-` + `  intent   — why this work exists NOW. The catalogue already says what the
+` + `  intent   — why this work exists NOW. The backlog already says what the
 ` + `             feature is; this says why it is worth an agent's turn today. A
 ` + `             criterion with no implementation, a verdict that came back failing,
 ` + `             a capability whose weight moved. Name the thing that changed.
@@ -30956,7 +30956,7 @@ var workTools = [
 ` + `             out if there is nothing to say; empty guidance is better than
 ` + `             restating the intent.
 
-` + "Then LINK IT. `catalog_link` with kind='work-item-feature' and " + "kind='work-item-ac' is what puts the stories and the acceptance criteria into " + "the brief. An unlinked work item hands the agent a sentence and no criteria, " + `which is the failure this whole model exists to prevent.
+` + "Then LINK IT. `backlog_link` with kind='work-item-feature' and " + "kind='work-item-ac' is what puts the stories and the acceptance criteria into " + "the brief. An unlinked work item hands the agent a sentence and no criteria, " + `which is the failure this whole model exists to prevent.
 
 ` + "Address it to the role that does the work, not the role that wants it: building " + "is 'engineer', verifying is 'quality-assurance', planning is 'product-manager'.",
     inputSchema: {
@@ -30982,7 +30982,7 @@ var workTools = [
     }
   },
   {
-    name: "catalog_steward_work",
+    name: "backlog_steward_work",
     title: "Reprioritise or reword a work item",
     description: "Change a work item's wording or its place in the queue without touching its " + `state. Requires product-manager or head-of-engineering.
 
@@ -31016,13 +31016,13 @@ var costAssessment = exports_external.object({
 var featureScopeBoundary = exports_external.object({ in_scope: exports_external.array(exports_external.string()), out_of_scope: exports_external.array(exports_external.string()) }).describe("Both headings are required, each an array.");
 var writeTools = [
   {
-    name: "catalog_create_product",
+    name: "backlog_create_product",
     title: "Create a product",
-    description: "Create a product — the root of a catalogue, and the partition every capability, " + "feature, story, and criterion is scoped by. Requires product-manager or " + `head-of-engineering (026).
+    description: "Create a product — the root of a backlog, and the partition every capability, " + "feature, story, and criterion is scoped by. Requires product-manager or " + `head-of-engineering (026).
 
-` + "THIS IS A ONCE-PER-REPOSITORY OPERATION. There is deliberately no tool to rename or " + "delete a product, because the key scopes every other row in the catalogue: getting it " + "wrong is not something a later call can undo. Call catalog_list_products first and " + `confirm the product does not already exist under another name.
+` + "THIS IS A ONCE-PER-REPOSITORY OPERATION. There is deliberately no tool to rename or " + "delete a product, because the key scopes every other row in the backlog: getting it " + "wrong is not something a later call can undo. Call backlog_list_products first and " + `confirm the product does not already exist under another name.
 
-` + "A second product for a repository that already has one silently SPLITS its catalogue — " + "nothing in the schema prevents it and nothing downstream will notice, because every " + `query scopes by product_id and will simply return the half it was pointed at.
+` + "A second product for a repository that already has one silently SPLITS its backlog — " + "nothing in the schema prevents it and nothing downstream will notice, because every " + `query scopes by product_id and will simply return the half it was pointed at.
 
 ` + "The key is the durable identifier and belongs in .superdev/product.json; the name is " + "display text and is the only part worth agonising over less.",
     inputSchema: {
@@ -31032,7 +31032,7 @@ var writeTools = [
     handler: async (client, args) => (await client.post("/v1/products", args)).body
   },
   {
-    name: "catalog_create_capability",
+    name: "backlog_create_capability",
     title: "Create a capability",
     description: `Add a capability to a product. Requires product-manager.
 
@@ -31055,7 +31055,7 @@ var writeTools = [
     }
   },
   {
-    name: "catalog_update_capability",
+    name: "backlog_update_capability",
     title: "Update a capability",
     description: `Revise a capability. Requires product-manager. Only the fields you send change.
 
@@ -31077,7 +31077,7 @@ var writeTools = [
     }
   },
   {
-    name: "catalog_create_feature",
+    name: "backlog_create_feature",
     title: "Create a feature",
     description: "Add a feature and link it to at least one capability, in one transaction. " + `Requires product-manager.
 
@@ -31104,7 +31104,7 @@ var writeTools = [
     }
   },
   {
-    name: "catalog_update_feature",
+    name: "backlog_update_feature",
     title: "Update a feature",
     description: `Revise a feature. Requires product-manager. Only the fields you send change.
 
@@ -31131,7 +31131,7 @@ var writeTools = [
     }
   },
   {
-    name: "catalog_create_story",
+    name: "backlog_create_story",
     title: "Create a user story",
     description: "Add a user story, optionally linked to a feature in the same transaction. " + `Requires product-manager.
 
@@ -31154,7 +31154,7 @@ var writeTools = [
     handler: async (client, args) => (await client.post("/v1/stories", args)).body
   },
   {
-    name: "catalog_update_story",
+    name: "backlog_update_story",
     title: "Update a user story",
     description: `Revise a story. Requires product-manager. Only the fields you send change.
 
@@ -31175,7 +31175,7 @@ var writeTools = [
     }
   },
   {
-    name: "catalog_create_acceptance_criterion",
+    name: "backlog_create_acceptance_criterion",
     title: "Create an acceptance criterion",
     description: "Add an acceptance criterion, optionally linked to a feature in the same transaction. " + `Requires product-manager.
 
@@ -31196,7 +31196,7 @@ var writeTools = [
     handler: async (client, args) => (await client.post("/v1/acceptance-criteria", args)).body
   },
   {
-    name: "catalog_update_acceptance_criterion",
+    name: "backlog_update_acceptance_criterion",
     title: "Update an acceptance criterion",
     description: `Revise a criterion. Requires product-manager. Only the fields you send change.
 
@@ -31229,54 +31229,54 @@ var allTools = [
 var toolsByName = new Map(allTools.map((tool) => [tool.name, tool]));
 
 // mcp/src/roles.ts
-var ALWAYS = ["catalog_doctor"];
+var ALWAYS = ["backlog_doctor"];
 var READS = [
-  "catalog_whoami",
-  "catalog_list_products",
-  "catalog_list_capabilities",
-  "catalog_get_capability",
-  "catalog_list_features",
-  "catalog_get_feature",
-  "catalog_get_story",
-  "catalog_get_acceptance_criterion",
-  "catalog_model_health",
-  "catalog_coverage",
-  "catalog_public_catalog",
-  "catalog_list_work",
-  "catalog_get_work"
+  "backlog_whoami",
+  "backlog_list_products",
+  "backlog_list_capabilities",
+  "backlog_get_capability",
+  "backlog_list_features",
+  "backlog_get_feature",
+  "backlog_get_story",
+  "backlog_get_acceptance_criterion",
+  "backlog_model_health",
+  "backlog_coverage",
+  "backlog_public_view",
+  "backlog_list_work",
+  "backlog_get_work"
 ];
 var HOLD_WORK = [
-  "catalog_claim_work",
-  "catalog_heartbeat_work",
-  "catalog_push_progress",
-  "catalog_finish_work"
+  "backlog_claim_work",
+  "backlog_heartbeat_work",
+  "backlog_push_progress",
+  "backlog_finish_work"
 ];
 var TENANT_TOOLS = {
-  correspondence: ["catalog_send_message", "catalog_read_messages"],
-  decision: ["catalog_read_decisions"]
+  correspondence: ["backlog_send_message", "backlog_read_messages"],
+  decision: ["backlog_read_decisions"]
 };
-var RULE = ["catalog_record_decision"];
-var JOURNAL = ["catalog_drain_journal", "catalog_journal_status"];
-var STEWARD_WORK = ["catalog_file_work", "catalog_steward_work"];
+var RULE = ["backlog_record_decision"];
+var JOURNAL = ["backlog_drain_journal", "backlog_journal_status"];
+var STEWARD_WORK = ["backlog_file_work", "backlog_steward_work"];
 var AUTHOR_MODEL = [
-  "catalog_create_capability",
-  "catalog_update_capability",
-  "catalog_create_feature",
-  "catalog_update_feature",
-  "catalog_create_story",
-  "catalog_update_story",
-  "catalog_create_acceptance_criterion",
-  "catalog_update_acceptance_criterion",
-  "catalog_link",
-  "catalog_unlink"
+  "backlog_create_capability",
+  "backlog_update_capability",
+  "backlog_create_feature",
+  "backlog_update_feature",
+  "backlog_create_story",
+  "backlog_update_story",
+  "backlog_create_acceptance_criterion",
+  "backlog_update_acceptance_criterion",
+  "backlog_link",
+  "backlog_unlink"
 ];
 var WRITES_BY_ROLE = {
-  "product-manager": [...AUTHOR_MODEL, ...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
-  "head-of-engineering": [...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
+  "product-manager": [...AUTHOR_MODEL, ...STEWARD_WORK, ...HOLD_WORK, "backlog_create_product"],
+  "head-of-engineering": [...STEWARD_WORK, ...HOLD_WORK, "backlog_create_product"],
   engineer: [...HOLD_WORK],
-  "quality-assurance": [...HOLD_WORK, "catalog_record_evaluation"],
-  ci: [...HOLD_WORK, "catalog_record_evaluation", "catalog_record_evidence"],
-  revops: [...HOLD_WORK, "catalog_record_evidence"]
+  "quality-assurance": [...HOLD_WORK, "backlog_record_evaluation"],
+  ci: [...HOLD_WORK, "backlog_record_evaluation", "backlog_record_evidence"],
+  revops: [...HOLD_WORK, "backlog_record_evidence"]
 };
 var ALL_TOOL_NAMES = new Set(allTools.map((t) => t.name));
 function tenantToolsForRole(role) {
@@ -31326,9 +31326,9 @@ function resolveSurface(actualRole, declaredRole, tenants) {
     const names = new Set(ALL_TOOL_NAMES);
     if (declaredRole !== undefined) {
       const narrowed = toolsForRole(declaredRole);
-      return withTenants(new Set([...names].filter((n) => narrowed.has(n))), `declared role "${declaredRole}" (the catalogue's answer was unavailable)`, tenants);
+      return withTenants(new Set([...names].filter((n) => narrowed.has(n))), `declared role "${declaredRole}" (the backlog's answer was unavailable)`, tenants);
     }
-    return withTenants(names, "every tool (the catalogue's answer was unavailable)", tenants);
+    return withTenants(names, "every tool (the backlog's answer was unavailable)", tenants);
   }
   const actual = toolsForRole(actualRole);
   if (declaredRole === undefined || declaredRole === actualRole) {
@@ -31347,7 +31347,7 @@ function withTenants(names, basis, tenants) {
 // schemas/acceptance-criterion.schema.json
 var acceptance_criterion_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://pando.codes/catalog/schemas/acceptance-criterion.schema.json",
+  $id: "https://pando.codes/backlog/schemas/acceptance-criterion.schema.json",
   title: "Acceptance Criterion",
   description: "A binary INSTRUCTION checking whether a feature does its job. Structured as three columns rather than prose so observability can be checked by machine. 'Never evaluated' is the ABSENCE of an ac_evaluation row, not a third verdict. Source: supabase/migrations/004_story_and_acceptance_criterion.sql",
   type: "object",
@@ -31400,7 +31400,7 @@ var acceptance_criterion_schema_default = {
 // schemas/capability.schema.json
 var capability_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://pando.codes/catalog/schemas/capability.schema.json",
+  $id: "https://pando.codes/backlog/schemas/capability.schema.json",
   title: "Capability",
   description: "One slice of a product's partition — a claim about part of what the product can do. Capabilities of a product are intended to be exhaustive and non-overlapping; the database cannot verify that (see coverage_review), so scope_boundary is mandatory as the cheap defence. Source: supabase/migrations/002_product_and_capability.sql",
   type: "object",
@@ -31466,7 +31466,7 @@ var capability_schema_default = {
         "public"
       ],
       default: "internal",
-      description: "visibility enum. Gates exposure through v_capability_catalog."
+      description: "visibility enum. Gates exposure through v_capability_backlog."
     },
     created_at: {
       type: "string",
@@ -31492,7 +31492,7 @@ var capability_schema_default = {
 // schemas/feature.schema.json
 var feature_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://pando.codes/catalog/schemas/feature.schema.json",
+  $id: "https://pando.codes/backlog/schemas/feature.schema.json",
   title: "Feature",
   description: "A thing the product does, serving one or more Capabilities. The contract boundary: Stories and Acceptance Criteria hang off a Feature, not off each other. Source: supabase/migrations/003_feature.sql",
   type: "object",
@@ -31678,7 +31678,7 @@ var feature_schema_default = {
 // schemas/product.schema.json
 var product_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://pando.codes/catalog/schemas/product.schema.json",
+  $id: "https://pando.codes/backlog/schemas/product.schema.json",
   title: "Product",
   description: "A Pando product. The unit within which Capabilities partition 100% of what the product can do; every weight normalization is per product. Source: supabase/migrations/002_product_and_capability.sql",
   type: "object",
@@ -31712,7 +31712,7 @@ var product_schema_default = {
 // schemas/story.schema.json
 var story_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://pando.codes/catalog/schemas/story.schema.json",
+  $id: "https://pando.codes/backlog/schemas/story.schema.json",
   title: "User Story",
   description: "Durable CONTEXT for a feature — why it exists, in the user's terms. Not a work ticket: a story is never 'done', only current, stale, or retired. Delivery lives in wi_* work items outside this database. Source: supabase/migrations/004_story_and_acceptance_criterion.sql",
   type: "object",
@@ -31795,7 +31795,7 @@ var story_schema_default = {
 // mcp/src/resources.ts
 var entry = (name, title, schema) => ({
   name: `${name}-schema`,
-  uri: `catalog://schema/${name}`,
+  uri: `backlog://schema/${name}`,
   title: `${title} schema`,
   description: typeof schema?.description === "string" ? schema.description : `JSON Schema for the ${title} entity.`,
   schema
@@ -31825,14 +31825,14 @@ ${JSON.stringify(error51.details, null, 2)}` : "";
   };
 }
 function createMcpServer(client, options = {}) {
-  const server = new McpServer({ name: "superdev-catalog", version: "0.1.0" }, {
-    instructions: "The Pando delivery-object catalogue: Capability -> Feature -> {User Story, " + `Acceptance Criterion}, and whether those capabilities currently work.
+  const server = new McpServer({ name: "superdev-backlog", version: "0.1.0" }, {
+    instructions: "The Pando delivery-object backlog: Capability -> Feature -> {User Story, " + `Acceptance Criterion}, and whether those capabilities currently work.
 
-` + "Two things to know before writing anything. First, the database enforces SHAPE, not " + "QUALITY — a capability whose scope_boundary reads 'stuff' satisfies every constraint " + "in the schema. The quality bar lives in each write tool's description; read it. " + "Second, authority is per-role: your key carries one pando_role, and a refusal is a " + `normal answer rather than a fault. Call catalog_whoami if a write is refused.
+` + "Two things to know before writing anything. First, the database enforces SHAPE, not " + "QUALITY — a capability whose scope_boundary reads 'stuff' satisfies every constraint " + "in the schema. The quality bar lives in each write tool's description; read it. " + "Second, authority is per-role: your key carries one pando_role, and a refusal is a " + `normal answer rather than a fault. Call backlog_whoami if a write is refused.
 
 ` + "Records are addressed by key, never by id. Capability and feature keys are unique " + `PER PRODUCT; story and acceptance-criterion keys are global.
 
-` + "TO GET WORK, call catalog_claim_work. Work is addressed to a ROLE — yours — and " + "arrives as a brief: why it exists, how to do it, the stories that explain it, and " + "the acceptance criteria it will be judged against. A claim is a LEASE that " + "expires: heartbeat while you work, and treat a lost lease as a full stop. An " + `empty answer means this role's queue is empty, which is success, not failure.
+` + "TO GET WORK, call backlog_claim_work. Work is addressed to a ROLE — yours — and " + "arrives as a brief: why it exists, how to do it, the stories that explain it, and " + "the acceptance criteria it will be judged against. A claim is a LEASE that " + "expires: heartbeat while you work, and treat a lost lease as a full stop. An " + `empty answer means this role's queue is empty, which is success, not failure.
 
 ` + (options.unconfigured !== undefined ? "THIS SERVER HOLDS NO KEY YET. Every tool below is listed, and every one of them " + "returns setup instructions instead of doing anything, because no api_url and " + "api_key could be found. Nothing can be read or written until that is fixed. Call " + "a tool if you want the instructions, and show them to the user verbatim — they " + "name the exact files that were consulted, and only the user can act on them." : options.surfaceBasis ? `The tools below are the ones this key can actually use — the menu is ${options.surfaceBasis}. ` + "A tool you cannot see is one the database would refuse, not one that is missing." : "") + (options.agentId ? `
 
@@ -31891,7 +31891,7 @@ async function identifyKey(apiUrl, apiKey, agentId) {
       signal: timeout
     });
     if (!response.ok) {
-      note(response.status === 401 ? "the catalogue rejected this API key (401). It may be revoked, expired, or " + "from another environment. Every tool will still be offered, and every " + "call will fail until the key is replaced." : `whoami returned ${response.status}; offering every tool and letting the ` + "catalogue decide.");
+      note(response.status === 401 ? "the backlog rejected this API key (401). It may be revoked, expired, or " + "from another environment. Every tool will still be offered, and every " + "call will fail until the key is replaced." : `whoami returned ${response.status}; offering every tool and letting the ` + "backlog decide.");
       return { role: undefined, tenants: undefined };
     }
     const body = await response.json();
@@ -31906,7 +31906,7 @@ async function identifyKey(apiUrl, apiKey, agentId) {
       tenants: Array.isArray(body.tenants) ? body.tenants.filter((t) => typeof t === "string") : undefined
     };
   } catch (error51) {
-    note(`could not reach ${apiUrl} to identify this key ` + `(${error51 instanceof Error ? error51.message : String(error51)}); ` + "offering every tool and letting the catalogue decide.");
+    note(`could not reach ${apiUrl} to identify this key ` + `(${error51 instanceof Error ? error51.message : String(error51)}); ` + "offering every tool and letting the backlog decide.");
     return { role: undefined, tenants: undefined };
   }
 }
@@ -31918,7 +31918,7 @@ function grantExpiryWarning(daysRaw) {
   const days = Math.round(daysRaw);
   if (days > GRANT_EXPIRY_WARNING_DAYS)
     return;
-  return days <= 0 ? "this machine's ORCHESTRATOR GRANT expires TODAY. When it lapses, every agent on " + "this machine stops at once — not just this one — and the 401 they get will not " + "say why. Mint a replacement now." : `this machine's ORCHESTRATOR GRANT expires in ${days} day${days === 1 ? "" : "s"}. ` + "It is the credential every agent here derives its key from, so all of them stop " + "together when it lapses. Replacing it needs whoever holds the catalogue's owner " + "credential, so start now rather than on the day.";
+  return days <= 0 ? "this machine's ORCHESTRATOR GRANT expires TODAY. When it lapses, every agent on " + "this machine stops at once — not just this one — and the 401 they get will not " + "say why. Mint a replacement now." : `this machine's ORCHESTRATOR GRANT expires in ${days} day${days === 1 ? "" : "s"}. ` + "It is the credential every agent here derives its key from, so all of them stop " + "together when it lapses. Replacing it needs whoever holds the backlog's owner " + "credential, so start now rather than on the day.";
 }
 function expiryWarning(daysRaw) {
   if (typeof daysRaw !== "number" || !Number.isFinite(daysRaw))
@@ -31933,7 +31933,7 @@ async function startConfigured({ config: config2, warnings }) {
     note(`configuration from ${config2.sources.join(", ")}`);
   for (const warning of warnings)
     note(warning);
-  const client = new CatalogClient({
+  const client = new BacklogClient({
     baseUrl: config2.apiUrl,
     apiKey: config2.apiKey,
     agentId: config2.agentId,
@@ -31951,11 +31951,11 @@ async function startConfigured({ config: config2, warnings }) {
   note(`acting as "${config2.agentId}"; ${surface.names.size} tools offered, based on ${surface.basis}`);
 }
 function unusableClient() {
-  return new CatalogClient({
+  return new BacklogClient({
     baseUrl: "http://superdev-unconfigured.invalid",
     apiKey: "",
     fetch: async () => {
-      throw new Error("the catalogue was never configured, so nothing may be requested from it");
+      throw new Error("the backlog was never configured, so nothing may be requested from it");
     }
   });
 }
@@ -31972,7 +31972,7 @@ async function startUnconfigured(error51, pinned) {
   const surface = resolveSurface(undefined, declaredRole);
   const server = createMcpServer(unusableClient(), {
     toolNames: surface.names,
-    unconfigured: "The superdev catalogue is not configured, so this tool did nothing. No request was " + "made. Show the following to the user; it is the whole of the fix, and only they can " + `apply it.
+    unconfigured: "The superdev backlog is not configured, so this tool did nothing. No request was " + "made. Show the following to the user; it is the whole of the fix, and only they can " + `apply it.
 
 ${error51.message}`
   });
@@ -32016,7 +32016,7 @@ A key IS configured here, but not one belonging to the ` + `"${pinned}" role, so
 async function startBootstrap(missing) {
   note(missing.message.split(`
 `)[0]);
-  note("this machine's grant may be able to create it — offering catalog_bind_repository " + "and nothing else, because this server holds no key until a product exists.");
+  note("this machine's grant may be able to create it — offering backlog_bind_repository " + "and nothing else, because this server holds no key until a product exists.");
   const server = createBootstrapServer({
     apiUrl: missing.apiUrl,
     grant: missing.grant,
@@ -32025,7 +32025,7 @@ async function startBootstrap(missing) {
     note
   });
   await server.connect(new StdioServerTransport);
-  note("1 tool offered: catalog_bind_repository");
+  note("1 tool offered: backlog_bind_repository");
 }
 var DEFAULT_UNPINNED_ROLE = "product-manager";
 async function startFromGrant(role, options) {
@@ -32057,7 +32057,7 @@ async function startFromGrant(role, options) {
   } catch (error51) {
     if (!(error51 instanceof RegistrationError))
       throw error51;
-    await startUnconfigured(new ConfigError(`registering this ${role} agent with the catalogue failed: ${error51.message}
+    await startUnconfigured(new ConfigError(`registering this ${role} agent with the backlog failed: ${error51.message}
 
 ` + `The grant at ${grant.config.sources[0] ?? "this machine"} was FOUND and used. ` + `This is not a missing key —
 setting api_key anywhere will not address it.
@@ -32075,7 +32075,7 @@ setting api_key anywhere will not address it.
 ` + "given is a worse outcome than an agent that cannot act at all."), options.pinned ? role : undefined);
     return;
   }
-  const client = new CatalogClient({
+  const client = new BacklogClient({
     baseUrl: grant.config.apiUrl,
     apiKey: registered.apiKey,
     agentId: registered.agentId,

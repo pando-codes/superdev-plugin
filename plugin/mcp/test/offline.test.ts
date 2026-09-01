@@ -1,5 +1,5 @@
 /**
- * What an agent can and cannot do when the catalogue is unreachable.
+ * What an agent can and cannot do when the backlog is unreachable.
  *
  * The design's local-first table has four rows, and three of them are proved
  * elsewhere: appends journal (journal.test.ts), drains replay idempotently
@@ -15,7 +15,7 @@
  *
  * "A 403 does not serve a cached success." Everything else here is ergonomics;
  * that one is the boundary. A cache that answered a refusal with yesterday's
- * success would tell an agent it may read something the catalogue has just said
+ * success would tell an agent it may read something the backlog has just said
  * it may not, which inverts the tenant gate and RLS in the one place neither can
  * see.
  */
@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiError, CatalogClient } from "../src/client.ts";
+import { ApiError, BacklogClient } from "../src/client.ts";
 import { toolsByName } from "../src/tools/index.ts";
 
 let home: string;
@@ -39,10 +39,10 @@ afterEach(() => {
 
 type Answer = { status: number; body: unknown } | "unreachable";
 
-function clientAnswering(answers: Answer[]): CatalogClient {
+function clientAnswering(answers: Answer[]): BacklogClient {
   let i = 0;
-  return new CatalogClient({
-    baseUrl: "http://catalog.test",
+  return new BacklogClient({
+    baseUrl: "http://backlog.test",
     apiKey: "pcat_test_key",
     agentId: "agent-1",
     cacheHome: home,
@@ -57,7 +57,7 @@ function clientAnswering(answers: Answer[]): CatalogClient {
   });
 }
 
-describe("reading with no catalogue", () => {
+describe("reading with no backlog", () => {
   test("falls back to the last good answer and says how old it is", async () => {
     const client = clientAnswering([
       { status: 200, body: { capabilities: [{ key: "checkout" }] } },
@@ -84,7 +84,7 @@ describe("reading with no catalogue", () => {
     await client.get("/v1/products/alpha/messages");
 
     // The cache holds a success for this exact path. Serving it here would tell
-    // the agent it may read a tenant the catalogue has just refused it.
+    // the agent it may read a tenant the backlog has just refused it.
     expect(client.get("/v1/products/alpha/messages")).rejects.toBeInstanceOf(ApiError);
   });
 
@@ -102,7 +102,7 @@ describe("reading with no catalogue", () => {
   test("a path never read before rethrows rather than inventing an empty answer", async () => {
     const client = clientAnswering(["unreachable"]);
     // An agent told a product has no capabilities, when the truth is that nobody
-    // could ask, is worse off than one told the catalogue is unreachable.
+    // could ask, is worse off than one told the backlog is unreachable.
     expect(client.get("/v1/products/alpha/capabilities")).rejects.toThrow("fetch failed");
   });
 
@@ -120,8 +120,8 @@ describe("reading with no catalogue", () => {
   });
 
   test("a client with no cacheHome keeps nothing and falls back to nothing", async () => {
-    const client = new CatalogClient({
-      baseUrl: "http://catalog.test",
+    const client = new BacklogClient({
+      baseUrl: "http://backlog.test",
       apiKey: "k",
       agentId: "a",
       fetch: (async () => {
@@ -136,9 +136,9 @@ describe("the operations that cannot be deferred", () => {
   const offline = () => clientAnswering(["unreachable"]);
 
   for (const [tool, args] of [
-    ["catalog_claim_work", { product_key: "alpha" }],
-    ["catalog_heartbeat_work", { work_item_key: "wi_a1b2c3" }],
-    ["catalog_finish_work", { work_item_key: "wi_a1b2c3", state: "done", outcome: "built it" }],
+    ["backlog_claim_work", { product_key: "alpha" }],
+    ["backlog_heartbeat_work", { work_item_key: "wi_a1b2c3" }],
+    ["backlog_finish_work", { work_item_key: "wi_a1b2c3", state: "done", outcome: "built it" }],
   ] as const) {
     test(`${tool} explains the rule instead of surfacing a transport error`, async () => {
       const result = (await toolsByName.get(tool)!.handler(offline(), args)) as any;
@@ -146,7 +146,7 @@ describe("the operations that cannot be deferred", () => {
       // The part that changes what the agent does next. Without it, a model that
       // cannot claim will improvise — invent a work item, or report that the
       // queue is broken.
-      expect(result.what_you_can_still_do).toContain("catalog_push_progress");
+      expect(result.what_you_can_still_do).toContain("backlog_push_progress");
       expect(result.explanation).toContain("mutual exclusion");
     });
   }
@@ -158,7 +158,7 @@ describe("the operations that cannot be deferred", () => {
     // "This item is already held" is information. Dressing it as an outage would
     // send the agent looking for a network problem that does not exist.
     expect(
-      toolsByName.get("catalog_claim_work")!.handler(held, { product_key: "alpha" }),
+      toolsByName.get("backlog_claim_work")!.handler(held, { product_key: "alpha" }),
     ).rejects.toBeInstanceOf(ApiError);
   });
 });

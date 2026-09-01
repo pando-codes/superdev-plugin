@@ -6,7 +6,7 @@
  * stdio.ts has had two: a configured one, and an inert one that registers every
  * tool and answers each with the instructions a person has to act on. That
  * second kind is right whenever the fix needs a person — a missing grant, an
- * expired one, a catalogue nobody can reach.
+ * expired one, a backlog nobody can reach.
  *
  * One failure is not like that. A machine holding a live grant, in a repository
  * with no product binding, is stuck on something 040 gave the grant the
@@ -18,7 +18,7 @@
  *
  * WHY EXACTLY ONE TOOL, AND ONLY ON THE PRODUCT-MANAGER SERVER
  *
- * Registering the catalogue surface here would be a lie: this server has no key,
+ * Registering the backlog surface here would be a lie: this server has no key,
  * and every one of those tools would refuse. Worse, it would invite an agent to
  * plan around them.
  *
@@ -47,16 +47,17 @@ export function createBootstrapServer(options: BootstrapOptions): McpServer {
   const remote = originRemote(options.projectDir);
 
   const server = new McpServer(
-    { name: "superdev-catalog", version: "0.1.0" },
+    { name: "superdev-backlog", version: "0.1.0" },
     {
       instructions:
         "THIS REPOSITORY IS NOT BOUND TO A PRODUCT YET, and this server holds no key " +
         "because of it — a key is minted for a product, and there is not one to mint " +
         "against.\n\n" +
-        "This machine's grant can create it. Call catalog_bind_repository once, with the " +
-        "product this repository is. Everything else in the catalogue stays unavailable " +
-        "until the session is reloaded afterwards, because the servers resolve their " +
-        "credentials at startup.\n\n" +
+        "This machine's grant can create it. Call backlog_bind_repository once, with the " +
+        "product this repository is. Everything else in the backlog stays unavailable " +
+        "until the Claude Code session is restarted afterwards — /reload-plugins is not " +
+        "enough, it does not restart MCP servers — because they resolve their credentials " +
+        "at startup.\n\n" +
         (remote === undefined
           ? "This checkout reports no git remote, so the product will be created without " +
             "one. That works, and it means nothing stops a second machine creating a " +
@@ -68,7 +69,7 @@ export function createBootstrapServer(options: BootstrapOptions): McpServer {
   );
 
   server.registerTool(
-    "catalog_bind_repository",
+    "backlog_bind_repository",
     {
       title: "Bind this repository to a product",
       description:
@@ -81,9 +82,10 @@ export function createBootstrapServer(options: BootstrapOptions): McpServer {
         "The key is permanent. There is no tool anywhere in this system to rename or delete " +
         "a product, because its key scopes every capability, feature, story, and criterion " +
         "underneath it. Usually the repository name; agonise over the display name less.\n\n" +
-        "AFTER THIS SUCCEEDS the session must be reloaded before any catalogue tool works: " +
-        "this server resolved its credentials at startup and cannot re-register itself " +
-        "mid-session. Say so plainly to the user rather than retrying.",
+        "AFTER THIS SUCCEEDS the Claude Code session must be restarted before any backlog " +
+        "tool works, and /reload-plugins is not enough because it does not restart MCP " +
+        "servers: this server resolved its credentials at startup and cannot re-register " +
+        "itself mid-session. Say so plainly to the user rather than retrying.",
       inputSchema: {
         product_key: z
           .string()
@@ -116,12 +118,13 @@ export function createBootstrapServer(options: BootstrapOptions): McpServer {
               text:
                 (product.created
                   ? `Created product "${product.productKey}" (${product.name}).`
-                  : `This repository is already catalogued as "${product.productKey}" ` +
+                  : `This repository is already recorded as "${product.productKey}" ` +
                     `(${product.name}) — joined it rather than creating a second one.`) +
                 `\n\nWrote ${options.productPath}. COMMIT IT: the binding is a fact about ` +
                 `the repository, not a local preference, and a colleague's checkout needs ` +
                 `it too.\n\n` +
-                `Reload the session for the catalogue tools to work — the servers resolve ` +
+                `Restart the Claude Code session for the backlog tools to work — ` +
+                `/reload-plugins is not enough, it does not restart MCP servers. They resolve ` +
                 `their credentials at startup, so this one is still holding none.`,
             },
           ],
@@ -139,7 +142,7 @@ export function createBootstrapServer(options: BootstrapOptions): McpServer {
                   ? `\n\nThis machine's grant exists and may not create products — that is a ` +
                     `ceiling on the grant itself (040), so the fix is a grant minted with ` +
                     `--may-create-products, not a change here. Only the person holding the ` +
-                    `catalogue's owner credential can issue one.`
+                    `backlog's owner credential can issue one.`
                   : ""),
             },
           ],

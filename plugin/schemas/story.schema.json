@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pando.codes/catalog/schemas/story.schema.json",
+  "$id": "https://pando.codes/backlog/schemas/story.schema.json",
   "title": "User Story",
   "description": "Durable CONTEXT for a feature — why it exists, in the user's terms. Not a work ticket: a story is never 'done', only current, stale, or retired. Delivery lives in wi_* work items outside this database. Source: supabase/migrations/004_story_and_acceptance_criterion.sql",
   "type": "object",

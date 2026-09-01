@@ -98,9 +98,9 @@ describe("warning about the orchestrator grant", () => {
     expect(today).not.toContain("0 day");
   });
 
-  test("says nothing when the catalogue predates 046 and sent no field", () => {
+  test("says nothing when the backlog predates 046 and sent no field", () => {
     // Silence, not zero. A client must never warn on the strength of a field it
-    // never received — that would make every older catalogue look like an
+    // never received — that would make every older backlog look like an
     // emergency.
     expect(grantExpiryWarning(undefined)).toBeUndefined();
   });

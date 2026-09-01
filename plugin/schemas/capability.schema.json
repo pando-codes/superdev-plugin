@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pando.codes/catalog/schemas/capability.schema.json",
+  "$id": "https://pando.codes/backlog/schemas/capability.schema.json",
   "title": "Capability",
   "description": "One slice of a product's partition — a claim about part of what the product can do. Capabilities of a product are intended to be exhaustive and non-overlapping; the database cannot verify that (see coverage_review), so scope_boundary is mandatory as the cheap defence. Source: supabase/migrations/002_product_and_capability.sql",
   "type": "object",
@@ -66,7 +66,7 @@
         "public"
       ],
       "default": "internal",
-      "description": "visibility enum. Gates exposure through v_capability_catalog."
+      "description": "visibility enum. Gates exposure through v_capability_backlog."
     },
     "created_at": {
       "type": "string",

@@ -8,12 +8,12 @@ import type { ToolDefinition } from "./types.ts";
 /**
  * Correspondence and decisions: the two tenants that are not delivery.
  *
- * WHY SENDING SUCCEEDS WHEN THE CATALOGUE IS UNREACHABLE
+ * WHY SENDING SUCCEEDS WHEN THE BACKLOG IS UNREACHABLE
  *
  * Both tenants are append-only and uncontended, which is exactly the class of
  * write that can be journalled locally and drained later. So a send writes to
  * `.superdev/journal/` first, then tries to drain; the tool succeeds either way
- * and reports whether the record has reached the catalogue yet.
+ * and reports whether the record has reached the backlog yet.
  *
  * This is not a convenience. An agent whose "tell quality-assurance the spec is
  * ready" call fails will do something else — retry, work around it, or tell the
@@ -28,7 +28,7 @@ import type { ToolDefinition } from "./types.ts";
  * WHY THERE IS NO `sender` OR `decided_by` ARGUMENT
  *
  * For the same reason there is no `role` argument anywhere: it is not the
- * caller's to assert. The catalogue forces both from the connection's declared
+ * caller's to assert. The backlog forces both from the connection's declared
  * agent id, and a parameter here would be a field the database overwrites —
  * which reads, to anyone calling it, like something they get to choose.
  */
@@ -38,24 +38,24 @@ const SUBJECT_HELP =
   "'superdev:delivery/work_item/wi_a1b2c3', 'local:agent-suite/work-item/wi_a1b2c3'. " +
   "A bare 'wi_a1b2c3' is REFUSED — two systems mint that shape over different id " +
   "spaces, and an unnamespaced reference is ambiguous between them. The target is " +
-  "never verified: it may live in a tenant this catalogue does not have.";
+  "never verified: it may live in a tenant this backlog does not have.";
 
 const subject = z.string().optional().describe(SUBJECT_HELP);
 
 export const tenantTools: ToolDefinition[] = [
   {
-    name: "catalog_send_message",
+    name: "backlog_send_message",
     title: "Send a message to another agent",
     description:
       "Send one message to one named agent. Requires the `correspondence` tenant.\n\n" +
       "ONE RECIPIENT. To reach two agents, send two messages. Asking one agent to pass " +
       "something on loses the record that the second was told, and makes the sender's account " +
       "of what happened depend on a third party doing something it was never asked to do.\n\n" +
-      "WRITES LOCALLY FIRST and drains to the catalogue afterwards, so this succeeds with no " +
-      "network. The answer says whether it has reached the catalogue yet; if it has not, it " +
+      "WRITES LOCALLY FIRST and drains to the backlog afterwards, so this succeeds with no " +
+      "network. The answer says whether it has reached the backlog yet; if it has not, it " +
       "will on the next drain and nothing is lost.\n\n" +
       "This is for JUDGMENT — an opinion, an escalation, a question, a heads-up. A request " +
-      "that is a UNIT OF WORK belongs in the queue instead: file it with catalog_file_work so " +
+      "that is a UNIT OF WORK belongs in the queue instead: file it with backlog_file_work so " +
       "it can be claimed, leased, and judged against criteria. A message asking someone to " +
       "build something is a message nobody is accountable for.",
     inputSchema: {
@@ -85,12 +85,12 @@ export const tenantTools: ToolDefinition[] = [
   },
 
   {
-    name: "catalog_read_messages",
+    name: "backlog_read_messages",
     title: "Read messages",
     description:
       "Read correspondence in a product, newest first. Requires the `correspondence` tenant.\n\n" +
-      "Reads the CATALOGUE, not the local journal, so a message this machine has journalled " +
-      "but not yet drained will not appear. Call catalog_drain_journal first if you have just " +
+      "Reads the BACKLOG, not the local journal, so a message this machine has journalled " +
+      "but not yet drained will not appear. Call backlog_drain_journal first if you have just " +
       "sent something and need to see it here.\n\n" +
       "Not restricted to messages addressed to you: reconstructing what happened between two " +
       "other agents is a normal thing to need, and a report that could only see its own inbox " +
@@ -120,7 +120,7 @@ export const tenantTools: ToolDefinition[] = [
   },
 
   {
-    name: "catalog_record_decision",
+    name: "backlog_record_decision",
     title: "Record a decision",
     description:
       "Record one ruling on one question. Requires the `decision` tenant AND a Head role — " +
@@ -133,7 +133,7 @@ export const tenantTools: ToolDefinition[] = [
       "disposition 'superseded' or a fresh verdict; nothing is edited, because the history of " +
       "what was believed when is what makes the record worth keeping.\n\n" +
       "You may not rule on your own request. `requested_by` must be somebody else.\n\n" +
-      "Writes locally first and drains afterwards, exactly as catalog_send_message does.",
+      "Writes locally first and drains afterwards, exactly as backlog_send_message does.",
     inputSchema: {
       product_key: z.string(),
       key: z
@@ -169,7 +169,7 @@ export const tenantTools: ToolDefinition[] = [
   },
 
   {
-    name: "catalog_read_decisions",
+    name: "backlog_read_decisions",
     title: "Read decisions",
     description:
       "Read rulings in a product, newest first. Requires the `decision` tenant.\n\n" +
@@ -201,17 +201,17 @@ export const tenantTools: ToolDefinition[] = [
   },
 
   {
-    name: "catalog_drain_journal",
+    name: "backlog_drain_journal",
     title: "Drain the local journal",
     description:
       "Send everything this machine has journalled but not yet delivered.\n\n" +
       "Sends, decisions, and progress notes already drain themselves, so this is for the case " +
       "where that " +
-      "failed: the catalogue was unreachable, the key was not yet configured, or the tenant " +
+      "failed: the backlog was unreachable, the key was not yet configured, or the tenant " +
       "was not enabled at the time. Call it after fixing any of those, or when you want to " +
       "know whether anything is still waiting.\n\n" +
       "Safe to call repeatedly and safe to call when there is nothing to do. Delivery is " +
-      "AT-LEAST-ONCE: a record the catalogue already has is reported as a duplicate and " +
+      "AT-LEAST-ONCE: a record the backlog already has is reported as a duplicate and " +
       "written again by nobody. `still_pending` above zero means something is still waiting, " +
       "and `problem` says what stopped it.",
     inputSchema: {
@@ -235,15 +235,15 @@ export const tenantTools: ToolDefinition[] = [
   },
 
   {
-    name: "catalog_journal_status",
+    name: "backlog_journal_status",
     title: "What is waiting in the local journal",
     description:
-      "How many records this machine has journalled, and how many have reached the catalogue.\n\n" +
-      "Touches no network, so it answers while the catalogue is down — which is exactly when " +
+      "How many records this machine has journalled, and how many have reached the backlog.\n\n" +
+      "Touches no network, so it answers while the backlog is down — which is exactly when " +
       "'has anything been lost?' is worth asking. Nothing has: `pending` is what is still on " +
-      "disk waiting, and catalog_drain_journal is what moves it.\n\n" +
+      "disk waiting, and backlog_drain_journal is what moves it.\n\n" +
       "The journal is this MACHINE's outbox, not shared state — anything drained already lives " +
-      "in the catalogue, and the cursor is per-machine. `.superdev/journal/` belongs in the " +
+      "in the backlog, and the cursor is per-machine. `.superdev/journal/` belongs in the " +
       "workspace's .gitignore; committing it makes two checkouts disagree about what has been " +
       "sent.",
     inputSchema: {},

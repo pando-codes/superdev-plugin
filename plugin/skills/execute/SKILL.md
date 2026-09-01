@@ -1,6 +1,6 @@
 ---
 name: execute
-description: You MUST use this to implement a plan once Features, User Stories, and Acceptance Criteria exist in the catalog. Builds the code in a worktree, one Task per Acceptance Criterion, and gates the PR on verification.
+description: You MUST use this to implement a plan once Features, User Stories, and Acceptance Criteria exist in the backlog. Builds the code in a worktree, one Task per Acceptance Criterion, and gates the PR on verification.
 ---
 
 # Executing Plans
@@ -15,7 +15,7 @@ Load plan of Features, User Stories, and Acceptance Criteria. Then review the pl
 
 ## The Process
 
-1. Load and Read all Features, User Stories, and Acceptance Criteria specified by the plan instructions.  Read them from the catalog following `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`
+1. Load and Read all Features, User Stories, and Acceptance Criteria specified by the plan instructions.  Read them from the backlog following `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`
 2. Draft Tasks using the principles of `${CLAUDE_PLUGIN_ROOT}/skills/execute/atdd.md` and `${CLAUDE_PLUGIN_ROOT}/skills/execute/testing-antipatterns.md`
 - Every Acceptance Criterion in scope must map to at least one Task, and every Task must trace back to a criterion.  State the mapping before starting — a criterion with no Task ships unmet, and a Task with no criterion is unspecified work
 3. Start an Agent Team

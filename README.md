@@ -18,7 +18,7 @@ authentication error if you do not.
 ## What it is
 
 superdev turns an idea into working code through a brainstorm → plan → execute → evaluate
-workflow, recording user stories, features, and acceptance criteria as catalog records — and then
+workflow, recording user stories, features, and acceptance criteria as backlog records — and then
 lets agents pull that work back out one well-defined, role-scoped item at a time.
 
 The whole of it is in [`plugin/README.md`](plugin/README.md), including the part worth reading
@@ -32,9 +32,9 @@ HTTPS URL and a path inside it. That is deliberate: the `github` source type clo
 a plugin published that way is installable only by people who already have a GitHub SSH key —
 which, on a machine that has never pushed to GitHub, is nobody.
 
-## Requesting access to the hosted catalog
+## Requesting access to the hosted backlog
 
-The plugin is free and public. The catalog it talks to is invite-only while it is in beta, and
+The plugin is free and public. The backlog it talks to is invite-only while it is in beta, and
 each account is provisioned by hand.
 
 **[Request access →](https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml)**

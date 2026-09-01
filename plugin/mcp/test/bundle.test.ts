@@ -54,7 +54,7 @@ const scratch: string[] = [];
 /** The interpreter an installed plugin launches the bundle with. */
 async function runtime(): Promise<string> {
   const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-  return manifest.mcpServers["catalog"].command;
+  return manifest.mcpServers["backlog"].command;
 }
 
 /** The build command as shipped, with its outfile pointed somewhere else. */
@@ -124,7 +124,7 @@ describe("the committed bundle", () => {
    *
    * Harmless in that instance, because the payloads were `did a thing`. Not
    * harmless in principle: a journal is an outbox of writes that have NOT
-   * reached the catalogue, so shipping one hands every installer somebody
+   * reached the backlog, so shipping one hands every installer somebody
    * else's pending records — and the drain tool would then try to send them.
    *
    * Asserted rather than trusted to .gitignore, for the reason the assertion
@@ -153,7 +153,7 @@ describe("the committed bundle", () => {
 
   test("exists where .claude-plugin/plugin.json says it does", async () => {
     const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-    const args: string[] = manifest.mcpServers["catalog"].args;
+    const args: string[] = manifest.mcpServers["backlog"].args;
     // The manifest addresses it through ${CLAUDE_PLUGIN_ROOT}, which is the
     // plugin root at runtime; the tail of that path is what must exist here.
     expect(args.some((a) => a.endsWith("/mcp/dist/stdio.js"))).toBe(true);
@@ -197,7 +197,7 @@ describe("the committed bundle", () => {
       env: {
         PATH: process.env.PATH ?? "",
         // Never contacted: listing tools is answered by the server itself.
-        SUPERDEV_API_URL: "http://catalog.invalid",
+        SUPERDEV_API_URL: "http://backlog.invalid",
         SUPERDEV_API_KEY: "pcat_live_0000000000000000000000000000000000000000",
       },
     });
@@ -235,7 +235,7 @@ describe("the committed bundle", () => {
    *
    * It used to: nothing configured meant the process wrote its instructions to
    * stderr and exited 1. The instructions were excellent and nobody read them —
-   * what a new user saw was a session with no catalog_* tools in it, which is
+   * what a new user saw was a session with no backlog_* tools in it, which is
    * also what a failed install, a bad marketplace entry, and a crashed server
    * look like. The one process holding the explanation threw it away.
    *
@@ -259,7 +259,7 @@ describe("the committed bundle", () => {
       const listed = await client.listTools();
       expect(listed.tools.map((t) => t.name).sort()).toEqual(allTools.map((t) => t.name).sort());
 
-      const result: any = await client.callTool({ name: "catalog_whoami", arguments: {} });
+      const result: any = await client.callTool({ name: "backlog_whoami", arguments: {} });
       const text = (result.content ?? []).map((c: any) => c.text ?? "").join("\n");
       expect(result.isError).toBe(true);
       // All three precedences, because the whole point of the message is that
@@ -282,12 +282,12 @@ describe("the committed bundle", () => {
       mkdirSync(join(project, ".superdev"));
       writeFileSync(
         join(project, ".superdev", "config.json"),
-        JSON.stringify({ api_url: "http://catalog.invalid", api_key: "pcat_test_x" }),
+        JSON.stringify({ api_url: "http://backlog.invalid", api_key: "pcat_test_x" }),
         { mode: 0o600 },
       );
       // The server must get past configuration and reach the transport. It
-      // cannot reach http://catalog.invalid, which is the point — an
-      // unreachable catalogue must not stop it starting, because the tool
+      // cannot reach http://backlog.invalid, which is the point — an
+      // unreachable backlog must not stop it starting, because the tool
       // surface is an optimisation and the database is the real boundary.
       const child = Bun.spawn({
         cmd: [await runtime(), BUNDLE],
@@ -304,7 +304,7 @@ describe("the committed bundle", () => {
       // assertion has to wait for the thing it is actually asserting.
       const stderr = await readUntil(child.stderr as ReadableStream, "tools offered", 15_000);
       child.kill();
-      expect(stderr).toContain("connected to http://catalog.invalid");
+      expect(stderr).toContain("connected to http://backlog.invalid");
       // Derived rather than written out: the count is incidental, and a literal
       // here turns "a tool was added" into a failure that says nothing.
       expect(stderr).toContain(`${allTools.length} tools offered`);
@@ -327,7 +327,7 @@ describe("the committed bundle", () => {
 describe("the runtime an installed plugin needs", () => {
   test("is node — a plugin that requires bun on PATH fails at the install nobody watches", async () => {
     const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-    expect(manifest.mcpServers["catalog"].command).toBe("node");
+    expect(manifest.mcpServers["backlog"].command).toBe("node");
   });
 
   test("is what the bundle is built for", async () => {

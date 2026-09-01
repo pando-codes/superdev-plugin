@@ -30,7 +30,7 @@ export interface SchemaResource {
 
 const entry = (name: string, title: string, schema: any): SchemaResource => ({
   name: `${name}-schema`,
-  uri: `catalog://schema/${name}`,
+  uri: `backlog://schema/${name}`,
   title: `${title} schema`,
   description:
     typeof schema?.description === "string"

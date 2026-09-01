@@ -13,7 +13,7 @@
  * WHAT IT IS NOT
  *
  * Not a security boundary, and 040's header says so at length: the string
- * travels to the catalogue from this process, and anything on this machine could
+ * travels to the backlog from this process, and anything on this machine could
  * send a different one. It is a coordination key between cooperating machines.
  */
 

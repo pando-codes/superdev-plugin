@@ -4,7 +4,7 @@
  * WHAT IS ACTUALLY UNDER TEST
  *
  * Not "registration works" — the backend suite proves that against a real
- * catalogue. What only exists here is the property that makes an agent's role
+ * backlog. What only exists here is the property that makes an agent's role
  * something it was GIVEN: that nothing reachable from a session can change which
  * role this server registers as.
  *
@@ -90,7 +90,7 @@ describe("which role a server is pinned to", () => {
     expect(pinnedRoleOf(env({ SUPERDEV_ROLE: "product-manager" }))).toBeUndefined();
   });
 
-  test("a role this catalogue does not define is a packaging bug, and says so", () => {
+  test("a role this backlog does not define is a packaging bug, and says so", () => {
     expect(() => pinnedRoleOf(env({ SUPERDEV_PINNED_ROLE: "superuser" }))).toThrow(ConfigError);
     try {
       pinnedRoleOf(env({ SUPERDEV_PINNED_ROLE: "superuser" }));
@@ -183,7 +183,7 @@ describe("what a pinned server refuses to start without", () => {
       expect(message).toContain(join(home, ".superdev", "orchestrator.json"));
       // And it must say the old arrangement still works, or the reader concludes
       // this release broke their setup.
-      expect(message).toContain('the unpinned "catalog" server');
+      expect(message).toContain('the unpinned "backlog" server');
     }
   });
 
@@ -291,7 +291,7 @@ describe("registering", () => {
     }
   });
 
-  test("an unreachable catalogue is a registration failure, not a crash", async () => {
+  test("an unreachable backlog is a registration failure, not a crash", async () => {
     const fetchImpl = (async () => {
       throw new Error("ECONNREFUSED");
     }) as unknown as typeof globalThis.fetch;

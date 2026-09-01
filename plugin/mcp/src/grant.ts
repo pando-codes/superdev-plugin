@@ -109,7 +109,7 @@ export interface GrantLoad {
  *
  * Because it is the one failure here that the session can DO something about.
  * Every other way loadGrant fails needs a person: a missing grant, an expired
- * one, a catalogue that cannot be reached. This one needs a product, and 040
+ * one, a backlog that cannot be reached. This one needs a product, and 040
  * gave the grant the authority to create one — so the caller that catches this
  * is expected to act on it rather than only report it, and it needs the api_url
  * and grant that were already resolved on the way here to do so.
@@ -213,7 +213,7 @@ export function pinnedRoleOf(env: NodeJS.ProcessEnv): Role | undefined {
   if (raw === undefined) return undefined;
   if (!isRole(raw)) {
     throw new ConfigError(
-      `SUPERDEV_PINNED_ROLE is "${raw}", which is not a role this catalogue defines. ` +
+      `SUPERDEV_PINNED_ROLE is "${raw}", which is not a role this backlog defines. ` +
         `Known roles: ${ROLES.join(", ")}. This is set by plugin.json, so a bad value ` +
         `here is a packaging bug rather than anything you can fix in a config file.`,
     );
@@ -275,13 +275,13 @@ export function loadGrant(
         `Issue one from the portal, under "Machines" — it takes about thirty seconds and\n` +
         `needs nothing but the account you already sign in with:\n` +
         `  ${PORTAL_URL}\n\n` +
-        `If you run your own catalogue, mint one with the owner database credential this\n` +
+        `If you run your own backlog, mint one with the owner database credential this\n` +
         `plugin deliberately does not hold:\n` +
         `  cd apps/backend && DATABASE_URL=... bun run mint-grant \\\n` +
         `      --org <account> --label "<this machine>" \\\n` +
         `      --roles agent_engineer,agent_quality_assurance,agent_product_manager\n\n` +
         `Until then this server offers its tools and refuses every call. The single-key\n` +
-        `arrangement still works: the unpinned "catalog" server reads config.json exactly\n` +
+        `arrangement still works: the unpinned "backlog" server reads config.json exactly\n` +
         `as it always has.`,
     );
   }
@@ -359,7 +359,7 @@ export interface RegisteredKey {
   /**
    * 044's tenants, handed down from the grant's ceiling.
    *
-   * Undefined when the catalogue is older than 044 and did not say — which is
+   * Undefined when the backlog is older than 044 and did not say — which is
    * not the same as a key carrying none, so it is left undefined and nothing is
    * narrowed. See stdio.ts's KeyIdentity for the same distinction.
    */
@@ -375,14 +375,14 @@ export interface RegisteredKey {
    * where its date is visible to the machine holding it, so it is the only
    * place a warning can be raised while the credential still works.
    *
-   * Undefined against a catalogue older than 046. That is deliberately not the
+   * Undefined against a backlog older than 046. That is deliberately not the
    * same as "expires today": a client must warn about nothing when the server
    * said nothing.
    */
   readonly grantExpiresInDays: number | undefined;
 }
 
-/** A registration the catalogue refused, as distinct from one that failed to reach it. */
+/** A registration the backlog refused, as distinct from one that failed to reach it. */
 export class RegistrationError extends Error {
   constructor(
     message: string,
@@ -396,7 +396,7 @@ export class RegistrationError extends Error {
  * Exchanges the machine's grant for this agent's key.
  *
  * Bounded rather than left to the default HTTP timeout, for the reason
- * stdio.ts's whoami call is: this is on the startup path, and a catalogue that
+ * stdio.ts's whoami call is: this is on the startup path, and a backlog that
  * is merely slow must not turn into a session that never gets its tools.
  */
 export async function registerAgent(
@@ -448,7 +448,7 @@ export async function registerAgent(
   const apiKey = str(body.api_key);
   if (!apiKey) {
     throw new RegistrationError(
-      "the catalogue accepted the registration but returned no key",
+      "the backlog accepted the registration but returned no key",
       response.status,
     );
   }
@@ -478,8 +478,8 @@ export async function registerAgent(
  *
  * Because both outcomes are success and they mean different things to the
  * person reading the result. The first machine to run this bootstrapped a
- * catalogue; the second joined one that a colleague already made, which is the
- * ordinary case and must not read as a collision. The catalogue decides which
+ * backlog; the second joined one that a colleague already made, which is the
+ * ordinary case and must not read as a collision. The backlog decides which
  * happened — this only reports it.
  */
 export interface ProvisionedProduct {
@@ -536,7 +536,7 @@ export async function provisionProduct(
   const productKey = str(body.product_key);
   if (!productKey) {
     throw new RegistrationError(
-      "the catalogue accepted the request but named no product",
+      "the backlog accepted the request but named no product",
       response.status,
     );
   }

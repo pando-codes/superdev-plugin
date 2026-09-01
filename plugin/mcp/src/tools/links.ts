@@ -162,10 +162,10 @@ function payloadFor(args: any): { path: string; payload: Record<string, unknown>
 
 export const linkTools: ToolDefinition[] = [
   {
-    name: "catalog_link",
+    name: "backlog_link",
     title: "Link two records",
     description:
-      "Create a link between two catalogue records. Requires product-manager.\n\n" +
+      "Create a link between two backlog records. Requires product-manager.\n\n" +
       "Which fields are required depends on `kind` — see its description. Stories and " +
       "acceptance criteria are SIBLINGS under a feature, not parent and child: each links to " +
       "the feature independently, and there is no story-to-criterion link.",
@@ -176,7 +176,7 @@ export const linkTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_unlink",
+    name: "backlog_unlink",
     title: "Remove a link",
     description:
       "Remove a link. Requires product-manager.\n\n" +

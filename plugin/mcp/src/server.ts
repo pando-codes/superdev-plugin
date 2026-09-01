@@ -1,5 +1,5 @@
 /**
- * Builds a configured MCP server over a catalogue API client.
+ * Builds a configured MCP server over a backlog API client.
  *
  * Transport-agnostic on purpose: stdio ships now and remote HTTP is a later
  * milestone, and the difference between them should be an entrypoint, not a
@@ -7,7 +7,7 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ApiError, type CatalogClient } from "./client.ts";
+import { ApiError, type BacklogClient } from "./client.ts";
 import { schemaResources } from "./resources.ts";
 import { allTools } from "./tools/index.ts";
 
@@ -16,7 +16,7 @@ import { allTools } from "./tools/index.ts";
  *
  * `isError: true` rather than a thrown exception, because a thrown error is a
  * PROTOCOL failure — it tells the client the tool broke, not that the request
- * was refused. An API 403 is a normal, informative outcome: the catalogue works
+ * was refused. An API 403 is a normal, informative outcome: the backlog works
  * exactly as designed and this key may not do that. The distinction decides
  * whether an agent adjusts or retries blindly.
  *
@@ -53,13 +53,13 @@ export interface ServerOptions {
   readonly agentId?: string;
   /**
    * Set when no configuration was found. Every tool is still REGISTERED, and
-   * every call returns this text instead of reaching the catalogue.
+   * every call returns this text instead of reaching the backlog.
    *
    * WHY A SERVER THAT CANNOT WORK STARTS ANYWAY
    *
    * The alternative is what this used to do: exit at startup. To the person who
    * has just installed the plugin that is indistinguishable from a plugin that
-   * is broken — the catalog_* tools are simply not in the session, the reason
+   * is broken — the backlog_* tools are simply not in the session, the reason
    * is a stderr line in a log they have no reason to open, and the composed
    * instructions that say exactly which three files were consulted are thrown
    * away by the only process that had them. Registering the tools and answering
@@ -74,21 +74,21 @@ export interface ServerOptions {
   readonly unconfigured?: string;
 }
 
-export function createMcpServer(client: CatalogClient, options: ServerOptions = {}): McpServer {
+export function createMcpServer(client: BacklogClient, options: ServerOptions = {}): McpServer {
   const server = new McpServer(
-    { name: "superdev-catalog", version: "0.1.0" },
+    { name: "superdev-backlog", version: "0.1.0" },
     {
       instructions:
-        "The Pando delivery-object catalogue: Capability -> Feature -> {User Story, " +
+        "The Pando delivery-object backlog: Capability -> Feature -> {User Story, " +
         "Acceptance Criterion}, and whether those capabilities currently work.\n\n" +
         "Two things to know before writing anything. First, the database enforces SHAPE, not " +
         "QUALITY — a capability whose scope_boundary reads 'stuff' satisfies every constraint " +
         "in the schema. The quality bar lives in each write tool's description; read it. " +
         "Second, authority is per-role: your key carries one pando_role, and a refusal is a " +
-        "normal answer rather than a fault. Call catalog_whoami if a write is refused.\n\n" +
+        "normal answer rather than a fault. Call backlog_whoami if a write is refused.\n\n" +
         "Records are addressed by key, never by id. Capability and feature keys are unique " +
         "PER PRODUCT; story and acceptance-criterion keys are global.\n\n" +
-        "TO GET WORK, call catalog_claim_work. Work is addressed to a ROLE — yours — and " +
+        "TO GET WORK, call backlog_claim_work. Work is addressed to a ROLE — yours — and " +
         "arrives as a brief: why it exists, how to do it, the stories that explain it, and " +
         "the acceptance criteria it will be judged against. A claim is a LEASE that " +
         "expires: heartbeat while you work, and treat a lost lease as a full stop. An " +

@@ -2,7 +2,7 @@
   "name": "@superdev/plugin",
   "private": true,
   "type": "module",
-  "description": "The Claude Code plugin: the client, and the method for using the catalogue.",
+  "description": "The Claude Code plugin: the client, and the method for using the backlog.",
   "scripts": {
     "build": "bun build mcp/src/stdio.ts --target=node --outfile mcp/dist/stdio.js",
     "test": "bun test",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@superdev/catalog-keys": "workspace:*",
+    "@superdev/backlog-keys": "workspace:*",
     "zod": "^4.0.0"
   },
   "devDependencies": {

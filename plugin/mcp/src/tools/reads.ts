@@ -13,7 +13,7 @@ const productKey = z.string().describe("Product slug, e.g. 'trenchcoat'.");
  */
 export const readTools: ToolDefinition[] = [
   {
-    name: "catalog_whoami",
+    name: "backlog_whoami",
     title: "Who is this key",
     description:
       "Report which Postgres role and pando_role this API key carries, and what the " +
@@ -24,15 +24,15 @@ export const readTools: ToolDefinition[] = [
     handler: async (client) => (await client.get("/v1/whoami")).body,
   },
   {
-    name: "catalog_list_products",
+    name: "backlog_list_products",
     title: "List products",
-    description: "List every product in the catalogue.",
+    description: "List every product in the backlog.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
     handler: async (client) => (await client.get("/v1/products")).body,
   },
   {
-    name: "catalog_list_capabilities",
+    name: "backlog_list_capabilities",
     title: "List capabilities",
     description:
       "List a product's capabilities. The capability set is the denominator for every " +
@@ -51,7 +51,7 @@ export const readTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_get_capability",
+    name: "backlog_get_capability",
     title: "Get a capability",
     description:
       "One capability with the features that serve it and its computed weight. " +
@@ -69,7 +69,7 @@ export const readTools: ToolDefinition[] = [
       ).body,
   },
   {
-    name: "catalog_list_features",
+    name: "backlog_list_features",
     title: "List features",
     description:
       "List a product's features. Only 'active' features count toward verification and " +
@@ -88,7 +88,7 @@ export const readTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_get_feature",
+    name: "backlog_get_feature",
     title: "Get a feature",
     description:
       "One feature with its stories, acceptance criteria, and verified state. Stories and " +
@@ -104,7 +104,7 @@ export const readTools: ToolDefinition[] = [
         .body,
   },
   {
-    name: "catalog_get_story",
+    name: "backlog_get_story",
     title: "Get a user story",
     description:
       "One user story with its derived confidence. Confidence decays from last_reviewed_at, " +
@@ -115,7 +115,7 @@ export const readTools: ToolDefinition[] = [
     handler: async (client, args) => (await client.get(`/v1/stories/${seg(args.story_key)}`)).body,
   },
   {
-    name: "catalog_get_acceptance_criterion",
+    name: "backlog_get_acceptance_criterion",
     title: "Get an acceptance criterion",
     description:
       "One acceptance criterion with its latest evaluation. 'Never evaluated' is the ABSENCE " +
@@ -126,7 +126,7 @@ export const readTools: ToolDefinition[] = [
       (await client.get(`/v1/acceptance-criteria/${seg(args.ac_key)}`)).body,
   },
   {
-    name: "catalog_model_health",
+    name: "backlog_model_health",
     title: "Model health",
     description:
       "Problems the model can detect in itself for one product — orphaned features, " +
@@ -138,7 +138,7 @@ export const readTools: ToolDefinition[] = [
       (await client.get(`/v1/products/${seg(args.product_key)}/model-health`)).body,
   },
   {
-    name: "catalog_coverage",
+    name: "backlog_coverage",
     title: "Coverage",
     description:
       "A product's weighted verified share, and how many of its capabilities carry no weight. " +
@@ -149,8 +149,8 @@ export const readTools: ToolDefinition[] = [
       (await client.get(`/v1/products/${seg(args.product_key)}/coverage`)).body,
   },
   {
-    name: "catalog_public_catalog",
-    title: "Public catalogue",
+    name: "backlog_public_view",
+    title: "Public backlog",
     description:
       "The GTM projection: public capabilities with their public feature counts. This is the " +
       "view intended to reach customers, so its contents are a claim you are making publicly.",

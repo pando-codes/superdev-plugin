@@ -29,8 +29,8 @@ turns those into scored, active parts of the product.
 
 ## Precondition
 
-The catalog must already be initialized.  If there is no product row, this is the wrong skill —
-use superdev:init.  Read the catalog per `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`, scoped
+The backlog must already be initialized.  If there is no product row, this is the wrong skill —
+use superdev:init.  Read the backlog per `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`, scoped
 to this repository's product, and state which product you resolved to.
 
 ## Step 1: Load the current state
@@ -48,7 +48,7 @@ the last item directly.  Where it doesn't, compute it — a left join from `feat
 `capability_has_feature`.
 
 **Then check the sum.**  Total the `vbo` of every `active` capability and state it.  If it is
-not 100, the catalog is already in an invalid state — report that before proposing anything
+not 100, the backlog is already in an invalid state — report that before proposing anything
 else, because whatever you change has to land on a valid distribution, and starting from a
 broken one just hides the original error.  `proposed` and `deprecated` capabilities are excluded
 from this total.
@@ -182,7 +182,7 @@ that isn't obvious, ask.
 
 **Treating VBO as a measurement.**  It is a *judgement* about what matters, informed by
 evidence but not derived from it.  Never compute it from feature counts, lines changed, or
-anything else the catalog happens to hold.
+anything else the backlog happens to hold.
 
 **Treating this as init.**  If there's no product row, stop and use superdev:init.  This skill
 never creates a product.

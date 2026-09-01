@@ -35,7 +35,7 @@ const AGENTS_DIR = join(import.meta.dir, "..", "..", "agents");
  * agent pointed at the wrong one fails the equality below rather than quietly
  * acquiring an authority it was not cut for.
  */
-const prefixFor = (role: Role): string => `mcp__plugin_superdev_catalog-${role}__`;
+const prefixFor = (role: Role): string => `mcp__plugin_superdev_backlog-${role}__`;
 
 /** Which role each shipped agent is cut for. */
 const AGENT_ROLES: Record<string, Role> = {
@@ -100,7 +100,7 @@ describe("each agent is offered exactly its role's tools", () => {
       // credential — and therefore the authority — unreachable rather than
       // merely unlisted.
       const foreign = agent.tools.filter(
-        (t) => t.startsWith("mcp__plugin_superdev_catalog") && !t.startsWith(PREFIX),
+        (t) => t.startsWith("mcp__plugin_superdev_backlog") && !t.startsWith(PREFIX),
       );
       expect([agent.name, foreign]).toEqual([agent.name, []]);
     });
@@ -115,7 +115,7 @@ describe("each agent is offered exactly its role's tools", () => {
     });
 
     test(`${agent.name} still has the ordinary tools it needs to do the work`, () => {
-      // An agent narrowed to catalog tools alone could claim work and then not
+      // An agent narrowed to backlog tools alone could claim work and then not
       // be able to do any of it.
       expect(agent.tools).toContain("Read");
       expect(agent.tools).toContain("Skill");
@@ -157,11 +157,11 @@ describe("the namespaces the agents address actually exist", () => {
     // Both directions: a server nobody addresses is dead weight that will drift,
     // and an agent addressing a server that does not exist has no tools.
     const pinned = Object.keys(manifest.mcpServers)
-      .filter((s) => s !== "catalog")
+      .filter((s) => s !== "backlog")
       .sort();
     expect(pinned).toEqual(
       Object.values(AGENT_ROLES)
-        .map((role) => `catalog-${role}`)
+        .map((role) => `backlog-${role}`)
         .sort(),
     );
   });
@@ -172,10 +172,10 @@ describe("the boundary each agent is built around", () => {
     const engineer = agents.find((a) => a.name === "superdev-engineer")!;
     const PREFIX = prefixFor("engineer");
     for (const forbidden of [
-      "catalog_update_acceptance_criterion",
-      "catalog_create_acceptance_criterion",
-      "catalog_record_evaluation",
-      "catalog_file_work",
+      "backlog_update_acceptance_criterion",
+      "backlog_create_acceptance_criterion",
+      "backlog_record_evaluation",
+      "backlog_file_work",
     ]) {
       expect([forbidden, engineer.tools.includes(PREFIX + forbidden)]).toEqual([forbidden, false]);
     }
@@ -184,14 +184,14 @@ describe("the boundary each agent is built around", () => {
   test("the verifier cannot rewrite what it is verifying", () => {
     const verifier = agents.find((a) => a.name === "superdev-verifier")!;
     const PREFIX = prefixFor("quality-assurance");
-    expect(verifier.tools).toContain(PREFIX + "catalog_record_evaluation");
-    expect(verifier.tools).not.toContain(PREFIX + "catalog_update_acceptance_criterion");
+    expect(verifier.tools).toContain(PREFIX + "backlog_record_evaluation");
+    expect(verifier.tools).not.toContain(PREFIX + "backlog_update_acceptance_criterion");
   });
 
   test("only the planner can file work", () => {
     for (const agent of agents) {
       const PREFIX = prefixFor(AGENT_ROLES[agent.name]!);
-      expect([agent.name, agent.tools.includes(PREFIX + "catalog_file_work")]).toEqual([
+      expect([agent.name, agent.tools.includes(PREFIX + "backlog_file_work")]).toEqual([
         agent.name,
         agent.name === "superdev-planner",
       ]);
@@ -201,9 +201,9 @@ describe("the boundary each agent is built around", () => {
   test("every agent can take and finish work, because every role is addressable", () => {
     for (const agent of agents) {
       const PREFIX = prefixFor(AGENT_ROLES[agent.name]!);
-      expect(agent.tools).toContain(PREFIX + "catalog_claim_work");
-      expect(agent.tools).toContain(PREFIX + "catalog_finish_work");
-      expect(agent.tools).toContain(PREFIX + "catalog_heartbeat_work");
+      expect(agent.tools).toContain(PREFIX + "backlog_claim_work");
+      expect(agent.tools).toContain(PREFIX + "backlog_finish_work");
+      expect(agent.tools).toContain(PREFIX + "backlog_heartbeat_work");
     }
   });
 });

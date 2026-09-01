@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pando.codes/catalog/schemas/product.schema.json",
+  "$id": "https://pando.codes/backlog/schemas/product.schema.json",
   "title": "Product",
   "description": "A Pando product. The unit within which Capabilities partition 100% of what the product can do; every weight normalization is per product. Source: supabase/migrations/002_product_and_capability.sql",
   "type": "object",

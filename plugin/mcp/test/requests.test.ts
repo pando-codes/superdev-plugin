@@ -31,13 +31,13 @@ function reset(): void {
 describe("reads", () => {
   test("whoami takes no arguments and hits /v1/whoami", async () => {
     reset();
-    await call(h.client, "catalog_whoami");
+    await call(h.client, "backlog_whoami");
     expect(h.only()).toMatchObject({ method: "GET", path: "/v1/whoami" });
   });
 
   test("a filter becomes a query string, not a path segment", async () => {
     reset();
-    await call(h.client, "catalog_list_capabilities", {
+    await call(h.client, "backlog_list_capabilities", {
       product_key: "trenchcoat",
       status: "active",
     });
@@ -48,23 +48,23 @@ describe("reads", () => {
 
   test("an omitted filter sends no query string at all", async () => {
     reset();
-    await call(h.client, "catalog_list_features", { product_key: "trenchcoat" });
+    await call(h.client, "backlog_list_features", { product_key: "trenchcoat" });
     expect(h.only().query).toBe("");
   });
 
   test("story and criterion reads are global — no product in the path", async () => {
     reset();
-    await call(h.client, "catalog_get_story", { story_key: "story_9f3k2a" });
+    await call(h.client, "backlog_get_story", { story_key: "story_9f3k2a" });
     expect(h.only().path).toBe("/v1/stories/story_9f3k2a");
 
     reset();
-    await call(h.client, "catalog_get_acceptance_criterion", { ac_key: "ac_7bq1lm" });
+    await call(h.client, "backlog_get_acceptance_criterion", { ac_key: "ac_7bq1lm" });
     expect(h.only().path).toBe("/v1/acceptance-criteria/ac_7bq1lm");
   });
 
   test("keys are percent-encoded, because a key is user data", async () => {
     reset();
-    await call(h.client, "catalog_get_capability", {
+    await call(h.client, "backlog_get_capability", {
       product_key: "trenchcoat",
       capability_key: "a/b",
     });
@@ -75,7 +75,7 @@ describe("reads", () => {
 describe("writes", () => {
   test("create_product posts the whole body to the collection", async () => {
     reset();
-    await call(h.client, "catalog_create_product", { key: "reelmates", name: "Reelmates" });
+    await call(h.client, "backlog_create_product", { key: "reelmates", name: "Reelmates" });
     const req = h.only();
     expect(req).toMatchObject({ method: "POST", path: "/v1/products" });
     expect(req.body).toEqual({ key: "reelmates", name: "Reelmates" });
@@ -83,7 +83,7 @@ describe("writes", () => {
 
   test("product_key addresses the capability route and is stripped from the body", async () => {
     reset();
-    await call(h.client, "catalog_create_capability", {
+    await call(h.client, "backlog_create_capability", {
       product_key: "trenchcoat",
       key: "telemetry-capture",
       name: "Telemetry capture",
@@ -98,7 +98,7 @@ describe("writes", () => {
 
   test("create_story keeps product_key IN the body, since the route is global", async () => {
     reset();
-    await call(h.client, "catalog_create_story", {
+    await call(h.client, "backlog_create_story", {
       key: "story_9f3k2a",
       product_key: "trenchcoat",
       role: "r",
@@ -115,7 +115,7 @@ describe("writes", () => {
 
   test("when_/then_ keep their trailing underscores on the wire", async () => {
     reset();
-    await call(h.client, "catalog_create_acceptance_criterion", {
+    await call(h.client, "backlog_create_acceptance_criterion", {
       key: "ac_7bq1lm",
       product_key: "trenchcoat",
       given: "g",
@@ -130,7 +130,7 @@ describe("writes", () => {
 
   test("a patch sends only the fields given", async () => {
     reset();
-    await call(h.client, "catalog_update_capability", {
+    await call(h.client, "backlog_update_capability", {
       product_key: "trenchcoat",
       capability_key: "telemetry-capture",
       description: "Revised.",
@@ -192,7 +192,7 @@ describe("links", () => {
   for (const [kind, args, path, body] of CASES) {
     test(`${kind} routes to ${path} with exactly its own fields`, async () => {
       reset();
-      await call(h.client, "catalog_link", { kind, ...args });
+      await call(h.client, "backlog_link", { kind, ...args });
       const req = h.only();
       expect([kind, req.method, req.path]).toEqual([kind, "POST", path]);
       // Exact equality, not a subset: a link carrying a field from another kind
@@ -202,14 +202,14 @@ describe("links", () => {
 
     test(`${kind} unlinks through the same path with DELETE`, async () => {
       reset();
-      await call(h.client, "catalog_unlink", { kind, ...args });
+      await call(h.client, "backlog_unlink", { kind, ...args });
       expect([kind, h.only().method, h.only().path]).toEqual([kind, "DELETE", path]);
     });
   }
 
   test("capability-feature carries the per-edge scores when they are given", async () => {
     reset();
-    await call(h.client, "catalog_link", {
+    await call(h.client, "backlog_link", {
       kind: "capability-feature",
       product_key: "p",
       capability_key: "c",
@@ -230,7 +230,7 @@ describe("links", () => {
     // The API is .strict(), and "no opinion" has to stay distinguishable from
     // "assessed as zero" all the way to the column.
     reset();
-    await call(h.client, "catalog_link", {
+    await call(h.client, "backlog_link", {
       kind: "capability-feature",
       product_key: "p",
       capability_key: "c",
@@ -244,7 +244,7 @@ describe("links", () => {
 
   test("a missing field is refused BEFORE any request is made", async () => {
     reset();
-    const result = await call(h.client, "catalog_link", {
+    const result = await call(h.client, "backlog_link", {
       kind: "capability-dependency",
       product_key: "p",
       from_capability_key: "a",
@@ -261,7 +261,7 @@ describe("links", () => {
 describe("evidence", () => {
   test("an evaluation is addressed by criterion and the key leaves the body", async () => {
     reset();
-    await call(h.client, "catalog_record_evaluation", {
+    await call(h.client, "backlog_record_evaluation", {
       ac_key: "ac_7bq1lm",
       verdict: "pass",
       method: "automated",
@@ -275,7 +275,7 @@ describe("evidence", () => {
 
   test("an evidence window posts the whole batch in one request", async () => {
     reset();
-    await call(h.client, "catalog_record_evidence", {
+    await call(h.client, "backlog_record_evidence", {
       product_key: "trenchcoat",
       kind: "active_users",
       as_of: "2026-08-01",
@@ -296,7 +296,7 @@ describe("evidence", () => {
 describe("the key", () => {
   test("travels as a bearer header and never as a query parameter", async () => {
     reset();
-    await call(h.client, "catalog_list_products");
+    await call(h.client, "backlog_list_products");
     const req = h.only();
     expect(req.headers.authorization).toBe(`Bearer ${TEST_KEY}`);
     expect(req.query).toBe("");
@@ -310,7 +310,7 @@ describe("refusals", () => {
       error: "forbidden",
       message: "this operation requires product-manager; this key carries quality-assurance",
     });
-    const result = await call(h.client, "catalog_create_product", { key: "p", name: "P" });
+    const result = await call(h.client, "backlog_create_product", { key: "p", name: "P" });
     expect(result.isError).toBe(true);
     // Verbatim: the API's sentence names both roles and is the actionable part.
     expect(result.text).toContain("this operation requires product-manager");
@@ -324,7 +324,7 @@ describe("refusals", () => {
       message: 'the row violates the constraint "feature_value_prop_shape"',
       details: { constraint: "feature_value_prop_shape" },
     });
-    const result = await call(h.client, "catalog_create_feature", {
+    const result = await call(h.client, "backlog_create_feature", {
       product_key: "p",
       key: "f",
       name: "n",
@@ -350,7 +350,7 @@ describe("refusals", () => {
 describe("the work queue", () => {
   test("claiming posts the product to /v1/work-items/claim", async () => {
     reset();
-    await call(h.client, "catalog_claim_work", {
+    await call(h.client, "backlog_claim_work", {
       product_key: "trenchcoat",
       lease_seconds: 600,
     });
@@ -361,13 +361,13 @@ describe("the work queue", () => {
 
   test("the session's identity travels as a header on every call", async () => {
     reset();
-    await call(h.client, "catalog_claim_work", { product_key: "trenchcoat" });
+    await call(h.client, "backlog_claim_work", { product_key: "trenchcoat" });
     expect(h.only().headers["x-pando-agent-id"]).toBe(TEST_AGENT);
   });
 
   test("a per-call agent_id overrides it, and never reaches the body", async () => {
     reset();
-    await call(h.client, "catalog_claim_work", {
+    await call(h.client, "backlog_claim_work", {
       product_key: "trenchcoat",
       agent_id: "worker-3",
     });
@@ -378,7 +378,7 @@ describe("the work queue", () => {
 
   test("listing turns filters into a query string", async () => {
     reset();
-    await call(h.client, "catalog_list_work", {
+    await call(h.client, "backlog_list_work", {
       product_key: "trenchcoat",
       role_required: "engineer",
       ready: true,
@@ -390,18 +390,18 @@ describe("the work queue", () => {
 
   test("ready=false is omitted rather than sent, so it cannot read as a filter", async () => {
     reset();
-    await call(h.client, "catalog_list_work", { product_key: "trenchcoat", ready: false });
+    await call(h.client, "backlog_list_work", { product_key: "trenchcoat", ready: false });
     expect(h.only().query).toBe("");
   });
 
   test("the work item key is a path segment on every tool that takes one", async () => {
     for (const [name, method, suffix, args] of [
-      ["catalog_get_work", "GET", "", {}],
-      ["catalog_heartbeat_work", "POST", "/heartbeat", {}],
-      // catalog_push_progress is deliberately absent: it is local-first and
-      // reaches the catalogue through the journal drain, not through a path
+      ["backlog_get_work", "GET", "", {}],
+      ["backlog_heartbeat_work", "POST", "/heartbeat", {}],
+      // backlog_push_progress is deliberately absent: it is local-first and
+      // reaches the backlog through the journal drain, not through a path
       // segment. Its request shape is asserted in "progress notes" below.
-      ["catalog_finish_work", "PATCH", "", { state: "done", outcome: "built it" }],
+      ["backlog_finish_work", "PATCH", "", { state: "done", outcome: "built it" }],
     ] as const) {
       reset();
       await call(h.client, name, { work_item_key: "wi_a1b2c3", ...args });
@@ -440,7 +440,7 @@ describe("the work queue", () => {
 
     test("a note drains to the product-agnostic endpoint, carrying its work item", async () => {
       reset();
-      await call(h.client, "catalog_push_progress", {
+      await call(h.client, "backlog_push_progress", {
         work_item_key: "wi_a1b2c3",
         kind: "progress",
         body: "did a thing",
@@ -455,13 +455,13 @@ describe("the work queue", () => {
 
     test("and the subagent's identity travels with it, not the process's", async () => {
       reset();
-      await call(h.client, "catalog_push_progress", {
+      await call(h.client, "backlog_push_progress", {
         work_item_key: "wi_a1b2c3",
         kind: "handoff",
         body: "over to you",
         agent_id: "eng-beta",
       });
-      // The catalogue forces a note's author from the connection's declared id,
+      // The backlog forces a note's author from the connection's declared id,
       // so a drain under the process identity would misattribute the note.
       expect(h.only().headers["x-pando-agent-id"]).toBe("eng-beta");
     });
@@ -469,7 +469,7 @@ describe("the work queue", () => {
 
   test("filing posts under the product and leaves product_key out of the body", async () => {
     reset();
-    await call(h.client, "catalog_file_work", {
+    await call(h.client, "backlog_file_work", {
       product_key: "trenchcoat",
       key: "wi_a1b2c3",
       title: "Build it",
@@ -490,7 +490,7 @@ describe("the work queue", () => {
 
   test("a malformed work item key is refused before any request is made", async () => {
     reset();
-    const result = await call(h.client, "catalog_get_work", { work_item_key: "wi_TOOLONG" });
+    const result = await call(h.client, "backlog_get_work", { work_item_key: "wi_TOOLONG" });
     expect(result.isError).toBe(true);
     expect(h.sent).toHaveLength(0);
   });

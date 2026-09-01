@@ -31,11 +31,11 @@ describe("every role", () => {
     }
   });
 
-  test("can read the whole catalogue — reading is not an assertion", () => {
+  test("can read the whole backlog — reading is not an assertion", () => {
     for (const role of ROLES) {
       const tools = toolsForRole(role);
-      for (const name of ["catalog_get_feature", "catalog_get_acceptance_criterion",
-                          "catalog_coverage", "catalog_list_work", "catalog_get_work"]) {
+      for (const name of ["backlog_get_feature", "backlog_get_acceptance_criterion",
+                          "backlog_coverage", "backlog_list_work", "backlog_get_work"]) {
         expect([role, name, tools.has(name)]).toEqual([role, name, true]);
       }
     }
@@ -44,8 +44,8 @@ describe("every role", () => {
   test("can take, hold, report on, and finish work addressed to it", () => {
     for (const role of ROLES) {
       const tools = toolsForRole(role);
-      for (const name of ["catalog_claim_work", "catalog_heartbeat_work",
-                          "catalog_push_progress", "catalog_finish_work"]) {
+      for (const name of ["backlog_claim_work", "backlog_heartbeat_work",
+                          "backlog_push_progress", "backlog_finish_work"]) {
         expect([role, name, tools.has(name)]).toEqual([role, name, true]);
       }
     }
@@ -63,33 +63,33 @@ describe("the engineer holds the narrowest surface that can still build", () => 
   const tools = toolsForRole("engineer");
 
   test("it cannot see a way to revise the criteria it will be judged against", () => {
-    expect(tools.has("catalog_update_acceptance_criterion")).toBe(false);
-    expect(tools.has("catalog_create_acceptance_criterion")).toBe(false);
+    expect(tools.has("backlog_update_acceptance_criterion")).toBe(false);
+    expect(tools.has("backlog_create_acceptance_criterion")).toBe(false);
   });
 
   test("nor to author any part of the model", () => {
     for (const name of [
-      "catalog_create_capability",
-      "catalog_update_capability",
-      "catalog_create_feature",
-      "catalog_update_feature",
-      "catalog_create_story",
-      "catalog_update_story",
-      "catalog_create_product",
-      "catalog_link",
-      "catalog_unlink",
+      "backlog_create_capability",
+      "backlog_update_capability",
+      "backlog_create_feature",
+      "backlog_update_feature",
+      "backlog_create_story",
+      "backlog_update_story",
+      "backlog_create_product",
+      "backlog_link",
+      "backlog_unlink",
     ]) {
       expect([name, tools.has(name)]).toEqual([name, false]);
     }
   });
 
   test("nor to record the verdict on its own work", () => {
-    expect(tools.has("catalog_record_evaluation")).toBe(false);
+    expect(tools.has("backlog_record_evaluation")).toBe(false);
   });
 
   test("nor to file its own work — a self-filed backlog is a to-do list", () => {
-    expect(tools.has("catalog_file_work")).toBe(false);
-    expect(tools.has("catalog_steward_work")).toBe(false);
+    expect(tools.has("backlog_file_work")).toBe(false);
+    expect(tools.has("backlog_steward_work")).toBe(false);
   });
 });
 
@@ -97,20 +97,20 @@ describe("quality-assurance renders verdicts and changes nothing it judges", () 
   const tools = toolsForRole("quality-assurance");
 
   test("it records evaluations", () => {
-    expect(tools.has("catalog_record_evaluation")).toBe(true);
+    expect(tools.has("backlog_record_evaluation")).toBe(true);
   });
 
   test("but cannot rewrite a criterion that turned out to be unobservable", () => {
     // Deliberate: an unobservable criterion goes back to the planner, because
     // rewriting it is a change to what the product promises, not a test fix.
-    expect(tools.has("catalog_update_acceptance_criterion")).toBe(false);
+    expect(tools.has("backlog_update_acceptance_criterion")).toBe(false);
   });
 });
 
 describe("a declared role narrows and never widens", () => {
   test("an engineer key asking to be the planner is still an engineer", () => {
     const { names } = resolveSurface("engineer", "product-manager");
-    expect(names.has("catalog_create_capability")).toBe(false);
+    expect(names.has("backlog_create_capability")).toBe(false);
     expect(names).toEqual(toolsForRole("engineer"));
   });
 
@@ -118,8 +118,8 @@ describe("a declared role narrows and never widens", () => {
     // The useful direction: run a broad key deliberately narrowed for a task,
     // so a build agent cannot reach for authoring tools it should not use.
     const { names, basis } = resolveSurface("product-manager", "engineer");
-    expect(names.has("catalog_create_capability")).toBe(false);
-    expect(names.has("catalog_claim_work")).toBe(true);
+    expect(names.has("backlog_create_capability")).toBe(false);
+    expect(names.has("backlog_claim_work")).toBe(true);
     expect(basis).toContain("narrowed");
   });
 
@@ -129,7 +129,7 @@ describe("a declared role narrows and never widens", () => {
   });
 });
 
-describe("when the catalogue cannot be reached", () => {
+describe("when the backlog cannot be reached", () => {
   test("everything is offered, because the database is still the boundary", () => {
     const { names, basis } = resolveSurface(undefined, undefined);
     expect(names.size).toBe(ALL.size);
@@ -142,7 +142,7 @@ describe("when the catalogue cannot be reached", () => {
   });
 
   test("a role this build has never heard of does not empty the session", () => {
-    // Forward compatibility: the catalogue may grow a seventh role before this
+    // Forward compatibility: the backlog may grow a seventh role before this
     // plugin knows about it, and a client that responded by offering no tools
     // would be broken by an additive change on the other side.
     const { names } = resolveSurface("archivist", undefined);

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pando.codes/catalog/schemas/acceptance-criterion.schema.json",
+  "$id": "https://pando.codes/backlog/schemas/acceptance-criterion.schema.json",
   "title": "Acceptance Criterion",
   "description": "A binary INSTRUCTION checking whether a feature does its job. Structured as three columns rather than prose so observability can be checked by machine. 'Never evaluated' is the ABSENCE of an ac_evaluation row, not a third verdict. Source: supabase/migrations/004_story_and_acceptance_criterion.sql",
   "type": "object",

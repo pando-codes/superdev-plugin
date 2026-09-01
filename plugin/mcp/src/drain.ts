@@ -1,5 +1,5 @@
 /**
- * Moving the journal to the catalogue.
+ * Moving the journal to the backlog.
  *
  * Separate from journal.ts because that file touches only the filesystem and
  * this one needs the network. The split is what lets the journal be tested
@@ -8,7 +8,7 @@
  *
  * WHY A FAILED DRAIN IS NOT AN ERROR
  *
- * Being unable to reach the catalogue is the ordinary state this design was
+ * Being unable to reach the backlog is the ordinary state this design was
  * built for, not an exception. An agent that journalled a message has already
  * done the thing it was asked to do; whether the record has reached a server yet
  * is operational news, and turning it into a thrown error would make every
@@ -16,7 +16,7 @@
  * retry, or work around it, or report to the user that coordination is broken.
  *
  * So drain reports what happened and does not throw. The cursor advances only
- * over records the catalogue confirmed, so a failure costs a retry and never a
+ * over records the backlog confirmed, so a failure costs a retry and never a
  * record.
  *
  * WHY THE CURSOR ADVANCES ONLY ON A CLEAN PRODUCT
@@ -29,11 +29,11 @@
  * Advancing anyway would silently drop the refused records. So the cursor stops
  * at the first record belonging to a product that failed, everything before it
  * is confirmed, and the successful-but-later records are simply re-sent next
- * time — where the catalogue reports them as duplicates and writes nothing. That
+ * time — where the backlog reports them as duplicates and writes nothing. That
  * is the whole reason at-least-once was chosen over trying for exactly-once.
  */
 
-import type { CatalogClient } from "./client.ts";
+import type { BacklogClient } from "./client.ts";
 import { ApiError, seg } from "./client.ts";
 import * as journal from "./journal.ts";
 import type { JournalRecord, JournalStream } from "./journal.ts";
@@ -84,7 +84,7 @@ const MAX_BATCH = 500;
 /**
  * Records are batched per (product, acting agent).
  *
- * The agent is part of the key and not just the product because the catalogue
+ * The agent is part of the key and not just the product because the backlog
  * FORCES a record's author from the connection's declared agent id. Two
  * subagents journalling through one process must therefore drain in two
  * requests, or the second one's notes land under the first one's name — which
@@ -93,7 +93,7 @@ const MAX_BATCH = 500;
 const groupKey = (r: JournalRecord): string => `${r.product_key}\u0000${r.as_agent ?? ""}`;
 
 export async function drain(
-  client: CatalogClient,
+  client: BacklogClient,
   home: string,
   stream: JournalStream,
 ): Promise<DrainOutcome> {
@@ -143,7 +143,7 @@ export async function drain(
         const where = productKey === "" ? (asAgent ?? "this agent") : productKey;
         problem ??=
           error instanceof ApiError
-            ? `${where}: the catalogue answered ${error.status} (${error.message})`
+            ? `${where}: the backlog answered ${error.status} (${error.message})`
             : `${where}: ${error instanceof Error ? error.message : String(error)}`;
         break;
       }

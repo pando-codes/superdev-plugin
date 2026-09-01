@@ -3,7 +3,7 @@
  *
  * WHY A DIAGNOSTIC EXISTS AT ALL
  *
- * Because the question "why is the catalogue not working" had no answer short
+ * Because the question "why is the backlog not working" had no answer short
  * of reading source. There are two credential kinds, four servers, three
  * configuration precedences, two spellings of every environment variable, and a
  * placeholder-expansion failure mode that silences the file it was supposed to
@@ -17,23 +17,23 @@
  *
  * WHY IT MAKES NO NETWORK CALL
  *
- * Because the states worth diagnosing include "the catalogue is unreachable",
+ * Because the states worth diagnosing include "the backlog is unreachable",
  * and a diagnostic that hangs in exactly the case it is most needed is not one.
  * Everything here is answerable from the filesystem and the environment, and it
  * says plainly which questions it did NOT answer — whether a credential is
- * accepted is `catalog_whoami`'s job, and it needs a network.
+ * accepted is `backlog_whoami`'s job, and it needs a network.
  *
  * WHAT MUST NEVER APPEAR IN THE OUTPUT
  *
  * A key, a grant, or any part of either beyond the 14-character prefix that
- * `@superdev/catalog-keys` documents as "the only part safe to log or display".
+ * `@superdev/backlog-keys` documents as "the only part safe to log or display".
  * This tool's output goes into a transcript by construction — that is the whole
  * point of it — so a secret reaching it is a secret that has to be re-minted.
  * Nothing here reads a credential except to measure its shape.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { environmentOf, isWellFormedKey, keyPrefix } from "@superdev/catalog-keys";
+import { environmentOf, isWellFormedKey, keyPrefix } from "@superdev/backlog-keys";
 import {
   grantConfigPath,
   isUnexpandedPlaceholder,
@@ -253,7 +253,7 @@ export function diagnose(
     str(objectAt(grantPath).grant) !== undefined;
 
   // 046. The grant's expiry, if mint-grant recorded it beside the credential.
-  // Advisory — the catalogue decides — but it is the only way to answer "is my
+  // Advisory — the backlog decides — but it is the only way to answer "is my
   // grant about to lapse" WITHOUT a network call, which matters because once it
   // has lapsed the call that would have said so is the call that fails.
   const grantExpiryDays = ((): number | undefined => {
@@ -275,7 +275,7 @@ export function diagnose(
 
   // The unpinned server, resolved by the same precedence stdio.ts uses.
   servers.push({
-    name: "catalog",
+    name: "backlog",
     outcome: bareKey !== undefined
       ? "a configured api_key"
       : haveGrant
@@ -284,13 +284,13 @@ export function diagnose(
     detail: bareKey === undefined && haveGrant && declaredRole === undefined
       ? `no role is declared, so it defaults to "${defaultRole}"`
       : bareKey === undefined && haveGrant && !productFile.present
-        ? "this repository has no product binding, so it offers catalog_bind_repository only"
+        ? "this repository has no product binding, so it offers backlog_bind_repository only"
         : undefined,
   });
 
   for (const role of PINNED) {
     servers.push({
-      name: `catalog-${role}`,
+      name: `backlog-${role}`,
       outcome: haveGrant
         ? "a key derived from the grant"
         : roleKey(role)
@@ -298,7 +298,7 @@ export function diagnose(
           : "NOTHING — it will report setup instructions",
       detail: haveGrant && !productFile.present
         ? role === "product-manager"
-          ? "no product binding, so it offers catalog_bind_repository only"
+          ? "no product binding, so it offers backlog_bind_repository only"
           : "no product binding, so it cannot register"
         : !haveGrant && !roleKey(role) && bareKey !== undefined
           ? "a bare api_key is present and a pinned server will NOT use one"
@@ -326,7 +326,7 @@ export function diagnose(
     if (cred.environment === "test" && apiUrl !== undefined && !isLocal(apiUrl)) {
       problems.push(
         `${cred.source} is a TEST credential but api_url is ${apiUrl}. A test key ` +
-          `against a live catalogue is rejected as though it were invalid.`,
+          `against a live backlog is rejected as though it were invalid.`,
       );
     }
   }
@@ -356,12 +356,15 @@ export function diagnose(
   const nextStep = !haveGrant && bareKey === undefined
     ? "This machine holds no credential. Install one — a grant is the one to want."
     : problems.length > 0
-      ? "Fix the problems above; they are local and none of them needs the catalogue."
+      ? "Fix the problems above; they are local and none of them needs the backlog."
       : !productFile.present
         ? `Nothing is wrong with the credentials. This repository is not bound to a ` +
-          `product — run superdev:init, or call catalog_bind_repository.`
-        : "Nothing is wrong locally. Call catalog_whoami to find out whether the " +
-          "catalogue accepts this credential — that is the half this tool cannot answer.";
+          `product — run superdev:init, or call backlog_bind_repository.`
+        : "Nothing is wrong locally. Call backlog_whoami to find out whether the " +
+          "backlog accepts this credential — that is the half this tool cannot " +
+          "answer. If whoami disagrees with the report above, this session started " +
+          "before the files reached their current state: restart the Claude Code " +
+          "session (/reload-plugins does not restart MCP servers).";
 
   return {
     files,
@@ -421,7 +424,12 @@ export function render(d: Diagnosis): string {
           .join("\n"),
   );
 
-  lines.push("", "WHAT EACH SERVER WOULD RUN ON  (not verified against the catalogue)");
+  lines.push(
+    "",
+    "WHAT EACH SERVER WOULD RUN ON AT NEXT START  (not verified against the backlog)",
+    "  This reads the files as they are NOW. A server already running resolved its",
+    "  credential at startup and may differ — backlog_whoami reports that one.",
+  );
   for (const s of d.servers) {
     lines.push(`  ${mark(!s.outcome.startsWith("NOTHING"))} ${s.name.padEnd(26)} ${s.outcome}`);
     if (s.detail !== undefined) lines.push(`      ${s.detail}`);
@@ -436,7 +444,7 @@ export function render(d: Diagnosis): string {
     lines.push(
       "",
       `GRANT EXPIRY  ${d.grantExpiresInDays} days remaining (as recorded locally by ` +
-        `mint-grant; the catalogue decides)`,
+        `mint-grant; the backlog decides)`,
     );
   }
 

@@ -1,5 +1,5 @@
 /**
- * The unpinned `catalog` server on a machine credentialled by a GRANT.
+ * The unpinned `backlog` server on a machine credentialled by a GRANT.
  *
  * WHY THIS FILE EXISTS
  *
@@ -16,7 +16,7 @@
  *
  * WHAT IS ACTUALLY UNDER TEST
  *
- * Not that registration succeeds — that needs a catalogue, and the backend
+ * Not that registration succeeds — that needs a backlog, and the backend
  * suite proves it against a real one. What lives only here is WHICH CREDENTIAL
  * IS CONSULTED and WHAT IS SAID WHEN IT DOES NOT WORK. Both are decided in
  * process startup, so every test drives the committed bundle the way
@@ -49,7 +49,7 @@ function writeJson(root: string, name: string, body: unknown, mode = 0o600): voi
 
 async function runtime(): Promise<string> {
   const manifest = await Bun.file(join(ROOT, ".claude-plugin", "plugin.json")).json();
-  return manifest.mcpServers["catalog"].command;
+  return manifest.mcpServers["backlog"].command;
 }
 
 interface Started {
@@ -79,10 +79,10 @@ async function start(env: Record<string, string>, cwd: string): Promise<Started>
     const tools = listed.tools.map((t) => t.name).sort();
     // The bootstrap server has no whoami, so asking for one there would throw
     // rather than answer. Nothing is lost: its whole surface is the tool list.
-    if (!tools.includes("catalog_whoami")) {
+    if (!tools.includes("backlog_whoami")) {
       return { tools, whoami: { text: "", isError: false } };
     }
-    const result: any = await client.callTool({ name: "catalog_whoami", arguments: {} });
+    const result: any = await client.callTool({ name: "backlog_whoami", arguments: {} });
     return {
       tools,
       whoami: {
@@ -100,7 +100,7 @@ function granted(): { env: Record<string, string>; project: string } {
   const home = dir();
   const project = dir();
   writeJson(home, "orchestrator.json", {
-    api_url: "http://catalog.invalid",
+    api_url: "http://backlog.invalid",
     grant: "pcat_live_0000000000000000000000000000000000000000",
   });
   return { env: { SUPERDEV_HOME: home, CLAUDE_PROJECT_DIR: project }, project };
@@ -155,7 +155,7 @@ describe("a grant on the machine and no api_key", () => {
     // 040's server, reached from the unpinned entrypoint for the first time.
     // The main thread is where a person runs superdev:init, so this is the
     // server that most needs to be able to fix an unbound checkout.
-    expect(started.tools).toEqual(["catalog_bind_repository"]);
+    expect(started.tools).toEqual(["backlog_bind_repository"]);
   }, 30_000);
 
   test("but NOT when the declared role is one that may not create products", async () => {
@@ -168,7 +168,7 @@ describe("a grant on the machine and no api_key", () => {
     // would be choosing its own subject. The rule is the role's, not the
     // server's, so it holds on the unpinned path exactly as it does on a pinned
     // one — and the menu narrows to what the declared role would have been.
-    expect(started.tools).not.toContain("catalog_bind_repository");
+    expect(started.tools).not.toContain("backlog_bind_repository");
     expect(started.tools).toEqual([...toolsForRole("engineer")].sort());
     expect(started.whoami.text).toContain("not bound to a product");
   }, 30_000);
@@ -199,7 +199,7 @@ describe("what is unchanged", () => {
     const { env, project } = granted();
     writeJson(project, "product.json", { product_key: "reelmates" }, 0o644);
     writeJson(project, "config.json", {
-      api_url: "http://catalog.invalid",
+      api_url: "http://backlog.invalid",
       api_key: "pcat_test_0000000000000000000000000000000000000000",
     });
 

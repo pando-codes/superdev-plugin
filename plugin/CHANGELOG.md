@@ -11,6 +11,49 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.10.0 — 2026-09-01
+
+**Breaking. Every tool and every MCP server is renamed.** By the rule above this is a *major*
+change — tools were renamed, which breaks agent definitions by name. It ships as `0.10.0` rather
+than `1.0.0` because the leading zero is doing exactly the job it exists for: the backlog is
+invite-only beta, and `1.0.0` would promise a stability this has not earned yet. The break is
+announced here, loudly, rather than encoded in a digit.
+
+### What you must change
+
+In any custom agent definition or settings file:
+
+    mcp__plugin_superdev_catalog__catalog_X   →   mcp__plugin_superdev_backlog__backlog_X
+
+The four servers are now `backlog`, `backlog-product-manager`, `backlog-engineer` and
+`backlog-quality-assurance`. All forty tools take the `backlog_` prefix, with one exception:
+`catalog_public_catalog` is now **`backlog_public_view`**, because `backlog_public_backlog` is not
+a name.
+
+An agent you do not update keeps working. It silently has fewer tools than it was written to have,
+which presents as an agent that "just doesn't use" a capability — the failure this repository's own
+`agents.test.ts` exists to prevent internally and cannot prevent for you.
+
+The three shipped agents are already updated. If you use those and nothing of your own, there is
+nothing for you to do.
+
+### What did not change
+
+Nothing about credentials. Keys still begin `pcat_`, no key needs reissuing, and both `SUPERDEV_*`
+and the deprecated `PANDO_CATALOG_*` environment variables are still read. The API host is still
+`pando-catalog-api.fly.dev` — it is in every issued key's `api_url`, so it cannot move.
+
+`GET /v1/products/:productKey/catalog` also keeps its name. A path served under `/v1` is permanent;
+renaming it would 404 every installed copy of this plugin the moment the backend deployed. The tool
+in front of it is `backlog_public_view`, which is the name you actually address.
+
+### Requires
+
+The backend deploy that carries migration `048`, which renames the view behind
+`backlog_public_view`. Migrations go **first** for this release — a new API against the old schema
+500s on that one route. Until the backend is deployed, `backlog_public_view` is the only tool
+affected; everything else works against the old and new schema alike.
+
 ## 0.9.2 — 2026-08-26
 
 **Patch**: no tool's name, arguments, or contract changed. `catalog_doctor` stopped reporting

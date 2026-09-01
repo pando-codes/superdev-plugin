@@ -5,7 +5,7 @@
  *
  * The first thing a new user experiences is the failure path, and it used to be
  * the worst-described state the server had: loadConfig threw, the process
- * exited, and the catalog_* tools were absent from the session. Absent tools
+ * exited, and the backlog_* tools were absent from the session. Absent tools
  * are the symptom of a broken plugin, a bad marketplace install, a version
  * mismatch, and a missing key alike — indistinguishable from each other, and
  * several steps removed from the one message that would have told them apart,
@@ -15,7 +15,7 @@
  * instructions to whoever calls one. Three things have to stay true for that to
  * be an improvement rather than a lie, and each is a test below: the tools are
  * really there, a call really does return the guidance instead of crashing, and
- * NOTHING is sent to a catalogue it has no key for.
+ * NOTHING is sent to a backlog it has no key for.
  *
  * The fourth is the one that matters most and is easiest to lose: a CONFIGURED
  * server is untouched by any of it.
@@ -74,7 +74,7 @@ describe("an install with no key", () => {
     const guidance = realGuidance();
     const h = await stub({ unconfigured: guidance });
 
-    const result = await call(h.client, "catalog_whoami");
+    const result = await call(h.client, "backlog_whoami");
 
     // isError, not a thrown exception: this is a refusal the model can act on,
     // the same distinction the API's own 403s get.
@@ -98,7 +98,7 @@ describe("an install with no key", () => {
 
   test("says so on a WRITE too, instead of appearing to have recorded something", async () => {
     const h = await stub({ unconfigured: realGuidance() });
-    const result = await call(h.client, "catalog_push_progress", {
+    const result = await call(h.client, "backlog_push_progress", {
       work_item_key: "wi_a1b2c3",
       kind: "progress",
       body: "Anything at all.",
@@ -109,8 +109,8 @@ describe("an install with no key", () => {
 
   test("sends nothing anywhere — it holds no key, so there is nothing to send", async () => {
     const h = await stub({ unconfigured: realGuidance() });
-    await call(h.client, "catalog_whoami");
-    await call(h.client, "catalog_list_products");
+    await call(h.client, "backlog_whoami");
+    await call(h.client, "backlog_list_products");
     expect(h.sent).toEqual([]);
   });
 
@@ -128,16 +128,16 @@ describe("an install with no key", () => {
     const h = await stub({ unconfigured: realGuidance(), toolNames: engineer });
     const listed = (await h.client.listTools()).tools.map((t) => t.name);
     expect(listed.sort()).toEqual([...engineer].sort());
-    expect(listed).not.toContain("catalog_update_acceptance_criterion");
+    expect(listed).not.toContain("backlog_update_acceptance_criterion");
   });
 });
 
 describe("an install WITH a key", () => {
-  test("is unchanged: a tool call reaches the catalogue as it always did", async () => {
+  test("is unchanged: a tool call reaches the backlog as it always did", async () => {
     const h = await stub();
     h.reply(200, { pando_role: "engineer" });
 
-    const result = await call(h.client, "catalog_whoami");
+    const result = await call(h.client, "backlog_whoami");
 
     expect(result.isError).toBe(false);
     expect(h.only().path).toBe("/v1/whoami");

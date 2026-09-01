@@ -26,7 +26,7 @@ const agentIdField = z
   .describe(
     "Who is acting, if not this server's configured identity. Pass a distinct id " +
       "when several agents share one session — otherwise they are the same agent to " +
-      "the catalogue and can release or finish each other's work by accident. It " +
+      "the backlog and can release or finish each other's work by accident. It " +
       "changes WHO holds a claim, never WHAT this key is allowed to do.",
   );
 
@@ -67,8 +67,8 @@ async function serverOnly<T>(what: string, run: () => Promise<T>): Promise<T | S
         "exclusion, and two agents resolving that after the fact would mean discarding work " +
         "somebody already did.",
       what_you_can_still_do:
-        "Keep working the item you already hold, and keep calling catalog_push_progress — " +
-        "notes are append-only and journal locally, so they will land when the catalogue is " +
+        "Keep working the item you already hold, and keep calling backlog_push_progress — " +
+        "notes are append-only and journal locally, so they will land when the backlog is " +
         "reachable again, even if this lease has expired by then. Do not take new work.",
     };
   }
@@ -84,7 +84,7 @@ interface ServerOnlyOffline {
 
 export const workTools: ToolDefinition[] = [
   {
-    name: "catalog_claim_work",
+    name: "backlog_claim_work",
     title: "Claim the next work item",
     description:
       "Take the next piece of work addressed to THIS KEY'S ROLE in the given product, " +
@@ -104,7 +104,7 @@ export const workTools: ToolDefinition[] = [
       "even if it is the highest priority thing in the product. That is the design, not " +
       "a misconfiguration.\n\n" +
       "3. THE CLAIM IS A LEASE, not an assignment. It expires. Call " +
-      "`catalog_heartbeat_work` while you work, and treat a lost lease as a full stop: " +
+      "`backlog_heartbeat_work` while you work, and treat a lost lease as a full stop: " +
       "another agent may already have taken the item.",
     inputSchema: {
       product_key: productKey,
@@ -138,7 +138,7 @@ export const workTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_list_work",
+    name: "backlog_list_work",
     title: "List the work queue",
     description:
       "See the queue without taking anything from it. Read-only, and it shows EVERY " +
@@ -181,7 +181,7 @@ export const workTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_get_work",
+    name: "backlog_get_work",
     title: "Read a work item's brief",
     description:
       "The full brief for one work item — the same payload a claim returns, without " +
@@ -194,10 +194,10 @@ export const workTools: ToolDefinition[] = [
       (await client.get(`/v1/work-items/${seg(args.work_item_key)}`)).body,
   },
   {
-    name: "catalog_heartbeat_work",
+    name: "backlog_heartbeat_work",
     title: "Extend your lease",
     description:
-      "Tell the catalogue you are still working on an item you hold, pushing its lease " +
+      "Tell the backlog you are still working on an item you hold, pushing its lease " +
       "out.\n\n" +
       "Call this whenever a step finishes and before anything long. A lapsed lease " +
       "returns the item to the queue, and another agent taking it is how the same work " +
@@ -223,7 +223,7 @@ export const workTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_push_progress",
+    name: "backlog_push_progress",
     title: "Push a progress note",
     description:
       "Append a note to a work item you are holding. Notes are permanent and cannot be " +
@@ -273,7 +273,7 @@ export const workTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_finish_work",
+    name: "backlog_finish_work",
     title: "Finish, block, or release a work item",
     description:
       "Move an item you hold out of `claimed`, and say what happened. The outcome is " +
@@ -291,7 +291,7 @@ export const workTools: ToolDefinition[] = [
       "              judgement; if you are the one building it, prefer blocked and say\n" +
       "              why, and let the planner decide.\n\n" +
       "RECORDING A VERDICT IS A DIFFERENT ACT. Finishing a work item says you did the " +
-      "work; it does not say the criteria pass. That is `catalog_record_evaluation`, " +
+      "work; it does not say the criteria pass. That is `backlog_record_evaluation`, " +
       "and deliberately not yours if your role cannot call it.",
     inputSchema: {
       work_item_key: workItemKey,
@@ -316,7 +316,7 @@ export const workTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_file_work",
+    name: "backlog_file_work",
     title: "File a work item",
     description:
       "Put a piece of work on the queue for a role to pick up. Requires product-manager " +
@@ -326,14 +326,14 @@ export const workTools: ToolDefinition[] = [
       "reads 'improve things' satisfies every constraint in the schema and is worthless " +
       "to the agent that claims it. What you write here IS the briefing:\n\n" +
       "  title    — one line, what will be true when this is done. Not a topic.\n" +
-      "  intent   — why this work exists NOW. The catalogue already says what the\n" +
+      "  intent   — why this work exists NOW. The backlog already says what the\n" +
       "             feature is; this says why it is worth an agent's turn today. A\n" +
       "             criterion with no implementation, a verdict that came back failing,\n" +
       "             a capability whose weight moved. Name the thing that changed.\n" +
       "  guidance — how you want it done, where it differs from the obvious. Leave it\n" +
       "             out if there is nothing to say; empty guidance is better than\n" +
       "             restating the intent.\n\n" +
-      "Then LINK IT. `catalog_link` with kind='work-item-feature' and " +
+      "Then LINK IT. `backlog_link` with kind='work-item-feature' and " +
       "kind='work-item-ac' is what puts the stories and the acceptance criteria into " +
       "the brief. An unlinked work item hands the agent a sentence and no criteria, " +
       "which is the failure this whole model exists to prevent.\n\n" +
@@ -378,7 +378,7 @@ export const workTools: ToolDefinition[] = [
     },
   },
   {
-    name: "catalog_steward_work",
+    name: "backlog_steward_work",
     title: "Reprioritise or reword a work item",
     description:
       "Change a work item's wording or its place in the queue without touching its " +

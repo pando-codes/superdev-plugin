@@ -6,13 +6,13 @@
  * The whole local-first claim rests on two properties, and both are the kind
  * that look fine until the day they matter:
  *
- *   1. NOTHING IS LOST WHEN THE CATALOGUE IS UNREACHABLE. An append succeeds
+ *   1. NOTHING IS LOST WHEN THE BACKLOG IS UNREACHABLE. An append succeeds
  *      with no network, and a failed drain leaves the cursor where it was, so
  *      the record is sent again rather than skipped.
  *
  *   2. NOTHING IS DUPLICATED WHEN THE ACKNOWLEDGEMENT IS. Delivery is
  *      at-least-once by design, so a replay must be reported as a duplicate and
- *      write nothing — which is a property of the catalogue, asserted end to end
+ *      write nothing — which is a property of the backlog, asserted end to end
  *      in apps/backend, and of the cursor, asserted here.
  *
  * The awkward case is a journal holding records for two products where one
@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CatalogClient } from "../src/client.ts";
+import { BacklogClient } from "../src/client.ts";
 import { drain } from "../src/drain.ts";
 import * as journal from "../src/journal.ts";
 
@@ -49,7 +49,7 @@ afterEach(() => {
  */
 function clientThat(
   respond: (path: string, body: any) => { status: number; body: unknown },
-): { client: CatalogClient; calls: Array<{ path: string; body: any }> } {
+): { client: BacklogClient; calls: Array<{ path: string; body: any }> } {
   const calls: Array<{ path: string; body: any }> = [];
   const fetchImpl = (async (input: any, init?: any) => {
     const url = new URL(typeof input === "string" ? input : input.url);
@@ -63,8 +63,8 @@ function clientThat(
   }) as typeof globalThis.fetch;
 
   return {
-    client: new CatalogClient({
-      baseUrl: "http://catalog.test",
+    client: new BacklogClient({
+      baseUrl: "http://backlog.test",
       apiKey: "pcat_test_key",
       agentId: "agent-1",
       fetch: fetchImpl,
@@ -135,7 +135,7 @@ describe("draining", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.path).toBe("/v1/products/alpha/messages/drain");
     // The client_id travels with the payload: it is the idempotency key, and
-    // the catalogue is unique on it.
+    // the backlog is unique on it.
     expect(calls[0]!.body.messages[0]).toHaveProperty("client_id");
     expect(await journal.status(home, "correspondence")).toMatchObject({ pending: 0 });
   });
@@ -171,10 +171,10 @@ describe("draining", () => {
     });
   });
 
-  test("an unreachable catalogue is reported, never thrown", async () => {
+  test("an unreachable backlog is reported, never thrown", async () => {
     await journal.append(home, "correspondence", "alpha", { body: "one" });
-    const dead = new CatalogClient({
-      baseUrl: "http://catalog.test",
+    const dead = new BacklogClient({
+      baseUrl: "http://backlog.test",
       apiKey: "k",
       agentId: "a",
       fetch: (() => Promise.reject(new Error("fetch failed"))) as unknown as typeof globalThis.fetch,
@@ -187,7 +187,7 @@ describe("draining", () => {
     expect(outcome.problem).toContain("fetch failed");
   });
 
-  test("the catalogue's duplicate count is reported rather than recomputed", async () => {
+  test("the backlog's duplicate count is reported rather than recomputed", async () => {
     await journal.append(home, "correspondence", "alpha", { body: "one" });
     const { client } = clientThat(() => ({
       status: 200,
@@ -226,7 +226,7 @@ describe("a journal spanning two products, one of which is refused", () => {
 
     const outcome = await drain(refuseBeta.client, home, "correspondence");
 
-    // Both alpha records landed at the catalogue...
+    // Both alpha records landed at the backlog...
     expect(outcome.landed).toBe(2);
     // ...but the cursor stopped at the beta record, so two are still pending:
     // beta, and the alpha record that comes after it.
@@ -237,7 +237,7 @@ describe("a journal spanning two products, one of which is refused", () => {
       pending: 2,
     });
 
-    // The re-send is safe precisely because the catalogue is idempotent: the
+    // The re-send is safe precisely because the backlog is idempotent: the
     // alpha record that already landed comes back as a duplicate, not a second
     // message. This is the trade at-least-once buys.
     const second = clientThat((path, body) => ({
@@ -262,15 +262,15 @@ describe("what the journal is not for", () => {
   });
 
   test("a note keeps the agent that wrote it, not the one that drained it", async () => {
-    // Several subagents share one process. The catalogue forces a note's author
+    // Several subagents share one process. The backlog forces a note's author
     // from the connection's agent id, so a batch drained under the process
     // identity would file eng-beta's notes under eng-alpha's name.
     await journal.append(home, "work-progress", "", { work_item_key: "wi_aaa001" }, "eng-alpha");
     await journal.append(home, "work-progress", "", { work_item_key: "wi_aaa002" }, "eng-beta");
 
     const seen: Array<string | undefined> = [];
-    const client = new CatalogClient({
-      baseUrl: "http://catalog.test",
+    const client = new BacklogClient({
+      baseUrl: "http://backlog.test",
       apiKey: "k",
       agentId: "the-process",
       fetch: (async (_input: any, init?: any) => {

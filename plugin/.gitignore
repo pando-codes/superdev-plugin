@@ -17,7 +17,7 @@ node_modules/
 # published to every install of 0.7.0 through 0.9.0.
 #
 # Harmless in that instance and not in principle: a journal is an outbox of
-# writes that have not reached the catalogue, and shipping one in a plugin
+# writes that have not reached the backlog, and shipping one in a plugin
 # release hands every installer someone else's pending records.
 .superdev/journal/
 .superdev/cache/

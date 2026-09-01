@@ -1,5 +1,5 @@
 /**
- * The catalogue API client.
+ * The backlog API client.
  *
  * This is the ONLY thing in the MCP server that talks to anything, and it
  * carries an API key and nothing else. The MCP process deliberately holds no
@@ -14,12 +14,12 @@
 
 import { recall, remember } from "./cache.ts";
 
-export interface CatalogClientOptions {
+export interface BacklogClientOptions {
   readonly baseUrl: string;
   readonly apiKey: string;
   /**
    * Who this process is in the work queue, as distinct from which key it holds.
-   * Sent as X-Pando-Agent-Id on every request; the catalogue records it as the
+   * Sent as X-Pando-Agent-Id on every request; the backlog records it as the
    * holder of any lease this client takes.
    */
   readonly agentId?: string;
@@ -67,14 +67,14 @@ export class ApiError extends Error {
   }
 }
 
-export class CatalogClient {
+export class BacklogClient {
   readonly #baseUrl: string;
   readonly #apiKey: string;
   readonly #agentId: string | undefined;
   readonly #fetch: typeof globalThis.fetch;
   readonly #cacheHome: string | undefined;
 
-  constructor(options: CatalogClientOptions) {
+  constructor(options: BacklogClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.#apiKey = options.apiKey;
     this.#agentId = options.agentId;
@@ -92,14 +92,14 @@ export class CatalogClient {
    *
    * It exists because several subagents inside a single Claude Code session
    * share one MCP server, and therefore one process identity. Without an
-   * override they would all be the same agent to the catalogue — able to
+   * override they would all be the same agent to the backlog — able to
    * finish, release, and heartbeat each other's work items by accident, which
    * is precisely the confusion the queue's lease exists to prevent. A subagent
    * that passes its own id gets its own claims.
    *
    * It is not a privilege mechanism. Every request still carries the same key
    * and therefore the same role; the identity distinguishes holders WITHIN that
-   * authority, and the catalogue documents that boundary the same way.
+   * authority, and the backlog documents that boundary the same way.
    */
   async request<T = unknown>(
     method: string,
@@ -132,15 +132,15 @@ export class CatalogClient {
   }
 
   /**
-   * A read, answered from the last good response when the catalogue cannot be
+   * A read, answered from the last good response when the backlog cannot be
    * reached at all.
    *
    * ONLY when it cannot be reached. An `ApiError` is a real answer — 401, 403,
    * 404 — and serving a cached success in its place would tell an agent it may
-   * read something the catalogue has just refused it. So the ApiError is
+   * read something the backlog has just refused it. So the ApiError is
    * rethrown untouched and only a transport failure falls back.
    *
-   * A cache miss rethrows too, and that is deliberate: "the catalogue is
+   * A cache miss rethrows too, and that is deliberate: "the backlog is
    * unreachable" is a far better answer than an empty list, which an agent
    * would read as "there is nothing there".
    */

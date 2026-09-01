@@ -1,5 +1,5 @@
 /**
- * The local journal: append here first, drain to the catalogue later.
+ * The local journal: append here first, drain to the backlog later.
  *
  * WHY THIS EXISTS
  *
@@ -9,9 +9,9 @@
  * with nothing configured; a hosted message bus would have replaced that with a
  * 401 in the middle of a conversation.
  *
- * So every append-only write lands in a file first and reaches the catalogue
+ * So every append-only write lands in a file first and reaches the backlog
  * afterwards. The agent's call succeeds whether or not anything is reachable,
- * and `catalog_drain_journal` is what eventually moves it.
+ * and `backlog_drain_journal` is what eventually moves it.
  *
  * WHAT DELIBERATELY DOES NOT COME THROUGH HERE
  *
@@ -39,7 +39,7 @@
  *
  * WHY IT SHOULD NOT BE COMMITTED
  *
- * The journal is a machine's outbox, not shared state — the catalogue is where
+ * The journal is a machine's outbox, not shared state — the backlog is where
  * the shared record lives, and anything drained is already there. The cursor in
  * particular is per-machine: committing it would mean two checkouts disagreeing
  * about how much of a shared file had been sent, and resolving that conflict by
@@ -54,7 +54,7 @@
  * Marking a record drained by editing the line would mean rewriting a file that
  * other processes are appending to. Instead the journal is never modified after
  * a line is written, and `<stream>.cursor` records how many records have been
- * confirmed landed. Re-draining from a stale cursor is harmless: the catalogue
+ * confirmed landed. Re-draining from a stale cursor is harmless: the backlog
  * is idempotent on `client_id`, so a replay reports duplicates and writes
  * nothing.
  */
@@ -92,7 +92,7 @@ export interface JournalRecord {
    * WHICH AGENT WROTE THIS, when it was not the process itself.
    *
    * Several subagents share one MCP server and therefore one process identity.
-   * The catalogue FORCES a note's author from the connection's declared agent
+   * The backlog FORCES a note's author from the connection's declared agent
    * id, so a record drained under the process identity would be attributed to
    * the wrong agent — and attribution is the one thing correspondence and notes
    * are for. Carried here and replayed on the drain request so a note written

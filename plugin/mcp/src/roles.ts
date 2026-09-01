@@ -18,7 +18,7 @@ import { allTools } from "./tools/index.ts";
  * eventually call it. It costs a turn, it produces a refusal that reads like a
  * fault, and — the part that actually matters — it invites the agent to go
  * looking for a way around a boundary that was deliberate. An engineer that
- * never sees `catalog_update_acceptance_criterion` does not spend a turn
+ * never sees `backlog_update_acceptance_criterion` does not spend a turn
  * discovering it may not revise the criteria it is judged against.
  *
  * It also shrinks the menu. Tool descriptions are context an agent pays for on
@@ -36,36 +36,36 @@ import { allTools } from "./tools/index.ts";
 /**
  * Tools every server offers, whatever it holds and whether it holds anything.
  *
- * Separate from READS because these are not catalogue reads — they ask nothing
+ * Separate from READS because these are not backlog reads — they ask nothing
  * of the database and are not narrowed by anything it decides. A diagnostic
  * that disappeared from the menu when a role narrowed, or when a credential was
  * missing, would be absent from every session that needed it.
  */
-const ALWAYS = ["catalog_doctor"] as const;
+const ALWAYS = ["backlog_doctor"] as const;
 
 /** Reads are open to every provisioned role: reading is not an assertion (012). */
 const READS = [
-  "catalog_whoami",
-  "catalog_list_products",
-  "catalog_list_capabilities",
-  "catalog_get_capability",
-  "catalog_list_features",
-  "catalog_get_feature",
-  "catalog_get_story",
-  "catalog_get_acceptance_criterion",
-  "catalog_model_health",
-  "catalog_coverage",
-  "catalog_public_catalog",
-  "catalog_list_work",
-  "catalog_get_work",
+  "backlog_whoami",
+  "backlog_list_products",
+  "backlog_list_capabilities",
+  "backlog_get_capability",
+  "backlog_list_features",
+  "backlog_get_feature",
+  "backlog_get_story",
+  "backlog_get_acceptance_criterion",
+  "backlog_model_health",
+  "backlog_coverage",
+  "backlog_public_view",
+  "backlog_list_work",
+  "backlog_get_work",
 ] as const;
 
 /** Holding and reporting on work. Any role can be addressed work. */
 const HOLD_WORK = [
-  "catalog_claim_work",
-  "catalog_heartbeat_work",
-  "catalog_push_progress",
-  "catalog_finish_work",
+  "backlog_claim_work",
+  "backlog_heartbeat_work",
+  "backlog_push_progress",
+  "backlog_finish_work",
 ] as const;
 
 /**
@@ -83,43 +83,43 @@ const HOLD_WORK = [
  * Head records one.
  */
 const TENANT_TOOLS: Record<string, readonly string[]> = {
-  correspondence: ["catalog_send_message", "catalog_read_messages"],
-  decision: ["catalog_read_decisions"],
+  correspondence: ["backlog_send_message", "backlog_read_messages"],
+  decision: ["backlog_read_decisions"],
 };
 
 /** Recording a ruling, which 042's policy allows to a Head alone. */
-const RULE = ["catalog_record_decision"] as const;
+const RULE = ["backlog_record_decision"] as const;
 
 /**
  * Local journal tools. Not gated by any single tenant, because they are about
  * the FILE rather than about either tenant's rows — but pointless when neither
  * tenant is enabled, so they appear only when at least one is.
  */
-const JOURNAL = ["catalog_drain_journal", "catalog_journal_status"] as const;
+const JOURNAL = ["backlog_drain_journal", "backlog_journal_status"] as const;
 
 /** Filing and ordering the backlog. Deliberately not the doer's. */
-const STEWARD_WORK = ["catalog_file_work", "catalog_steward_work"] as const;
+const STEWARD_WORK = ["backlog_file_work", "backlog_steward_work"] as const;
 
 const AUTHOR_MODEL = [
-  "catalog_create_capability",
-  "catalog_update_capability",
-  "catalog_create_feature",
-  "catalog_update_feature",
-  "catalog_create_story",
-  "catalog_update_story",
-  "catalog_create_acceptance_criterion",
-  "catalog_update_acceptance_criterion",
-  "catalog_link",
-  "catalog_unlink",
+  "backlog_create_capability",
+  "backlog_update_capability",
+  "backlog_create_feature",
+  "backlog_update_feature",
+  "backlog_create_story",
+  "backlog_update_story",
+  "backlog_create_acceptance_criterion",
+  "backlog_update_acceptance_criterion",
+  "backlog_link",
+  "backlog_unlink",
 ] as const;
 
 const WRITES_BY_ROLE: Record<Role, readonly string[]> = {
   // Authors the model and owns the backlog. The broadest role there is, which
   // is why the builder is deliberately not it.
-  "product-manager": [...AUTHOR_MODEL, ...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
+  "product-manager": [...AUTHOR_MODEL, ...STEWARD_WORK, ...HOLD_WORK, "backlog_create_product"],
 
   // Sets direction and orders the queue; does not author the model.
-  "head-of-engineering": [...STEWARD_WORK, ...HOLD_WORK, "catalog_create_product"],
+  "head-of-engineering": [...STEWARD_WORK, ...HOLD_WORK, "backlog_create_product"],
 
   // Builds. Its entire write authority is the work item it currently holds —
   // it cannot author a capability, feature, story, or criterion, and it cannot
@@ -128,13 +128,13 @@ const WRITES_BY_ROLE: Record<Role, readonly string[]> = {
 
   // Renders verdicts. Can take verification work; cannot change what it is
   // verifying against, which is the point.
-  "quality-assurance": [...HOLD_WORK, "catalog_record_evaluation"],
+  "quality-assurance": [...HOLD_WORK, "backlog_record_evaluation"],
 
   // A pipeline. Records what a run observed, in both shapes.
-  ci: [...HOLD_WORK, "catalog_record_evaluation", "catalog_record_evidence"],
+  ci: [...HOLD_WORK, "backlog_record_evaluation", "backlog_record_evidence"],
 
   // Reports the business signals capability weight is derived from.
-  revops: [...HOLD_WORK, "catalog_record_evidence"],
+  revops: [...HOLD_WORK, "backlog_record_evidence"],
 };
 
 const ALL_TOOL_NAMES = new Set(allTools.map((t) => t.name));
@@ -178,7 +178,7 @@ export function toolsForRole(role: Role): Set<string> {
 /**
  * Removes the tools for tenants this credential does not carry.
  *
- * `undefined` means the catalogue's answer was unavailable, and that fails
+ * `undefined` means the backlog's answer was unavailable, and that fails
  * OPEN for the same reason an unknown role does: this narrowing sits over a
  * boundary the database already holds, so being wrong costs a refusal an agent
  * can read, while failing closed would strand a session because a network call
@@ -219,7 +219,7 @@ export function resolveSurface(
   tenants?: readonly string[],
 ): { names: Set<string>; basis: string } {
   if (actualRole === undefined || !(ROLES as readonly string[]).includes(actualRole)) {
-    // Unknown role — whoami was unreachable, or the catalogue grew a role this
+    // Unknown role — whoami was unreachable, or the backlog grew a role this
     // build has never heard of. Show everything and let the database refuse.
     //
     // Fail-OPEN, deliberately, and only here. This filter is an ergonomic
@@ -232,11 +232,11 @@ export function resolveSurface(
       const narrowed = toolsForRole(declaredRole);
       return withTenants(
         new Set([...names].filter((n) => narrowed.has(n))),
-        `declared role "${declaredRole}" (the catalogue's answer was unavailable)`,
+        `declared role "${declaredRole}" (the backlog's answer was unavailable)`,
         tenants,
       );
     }
-    return withTenants(names, "every tool (the catalogue's answer was unavailable)", tenants);
+    return withTenants(names, "every tool (the backlog's answer was unavailable)", tenants);
   }
 
   const actual = toolsForRole(actualRole as Role);
