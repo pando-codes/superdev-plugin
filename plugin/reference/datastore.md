@@ -6,54 +6,60 @@ the store will accept.
 
 ## Reaching it
 
-This plugin ships its own MCP server.  Installing superdev installs it, and the tools below are
-the whole of the backlog surface — there is no second path and you should not construct one.
+This plugin ships **no server**. It is a manifest naming four HTTP endpoints on the backlog's own
+deployment, and the tools below are the whole of the backlog surface — there is no second path and
+you should not construct one.
 
-The server needs an API URL and a key, resolved at three precedences, highest first:
+Each entry carries one credential, read from an environment variable:
 
-| | Where | Good for |
+| Server | Endpoint | Credential |
 |---|---|---|
-| 1 | `SUPERDEV_API_URL` / `SUPERDEV_API_KEY` in the environment | CI, one-off runs |
-| 2 | `<project>/.superdev/config.json` | a repository that works as one role |
-| 3 | `~/.superdev/config.json` | your keys, wherever you are |
+| `backlog` | `/mcp` | `SUPERDEV_GRANT` |
+| `backlog-product-manager` | `/mcp/product-manager` | `SUPERDEV_GRANT_PRODUCT_MANAGER` |
+| `backlog-engineer` | `/mcp/engineer` | `SUPERDEV_GRANT_ENGINEER` |
+| `backlog-quality-assurance` | `/mcp/quality-assurance` | `SUPERDEV_GRANT_QUALITY_ASSURANCE` |
 
-Levels **merge field by field** rather than the higher one winning outright, so the usual
-arrangement works: your keys live user-scope, and the repository says which role it works as.
+Each variable holds an **orchestrator grant naming exactly one role and exactly one product**. Both
+halves come off the credential, so neither is ever something a caller says: the endpoint reads the
+role from the grant rather than from the URL it was reached by, and the path exists only to keep
+the four entries distinct endpoints.
 
-```json
-// ~/.superdev/config.json          (mode 0600)
-{ "api_url": "https://pando-catalog-api.fly.dev",
-  "keys": { "engineer": "pcat_live_…", "product-manager": "pcat_live_…" } }
+The grant is a minting authority, not a key. At the first call the server mints a short-lived,
+role-bound, product-scoped key from it, holds it, and replaces it before it lapses. **No agent ever
+sees that key**, and there is nothing to rotate by hand.
 
-// <project>/.superdev/config.json
-{ "role": "engineer" }
-```
+A variable must be exported in the shell that launches Claude Code. A manifest expands `${VAR}`
+from there and nowhere else — not from `.claude/settings.json`, not from anything per-repository.
+If the `backlog_*` tools are not in the session, that is almost always why; run
+`claude mcp list | grep backlog` and use the `connect` skill.
 
-If the `backlog_*` tools are not in the session, that is the reason — the server exits rather
-than running unconfigured, and says on stderr exactly which of the three places it looked.
-Keys are minted per holder from `apps/backend`, which holds the owner database credential this
-plugin deliberately does not.
+### There is no offline path
+
+Reads are not cached and writes are not journalled. Both used to exist and both were removed with
+the local transport: their premise was that the rest of a session still worked while the backlog
+was unreachable, and every tool here is now remote. If the backlog cannot be reached, stop — do
+not improvise a local record.
 
 ### The tools you are offered are the ones your key can use
 
-At startup the server asks `whoami` and registers only the tools your role can actually call.
-An engineer key never sees `backlog_update_acceptance_criterion`.
+The endpoint knows your role at connect, from the credential, and offers only the tools that role
+can actually call. An engineer connection never sees `backlog_update_acceptance_criterion`.
 
 **This is a surface, not a boundary.** Authority is still decided by Postgres; this only stops
 you spending a turn discovering a refusal — and stops a deliberate boundary looking like an
-obstacle to route around. If the backlog cannot be reached at startup the full surface is
-offered and the database still refuses what it always would.
-
-`SUPERDEV_ROLE` may **narrow** the surface below what your key carries, never widen it.
+obstacle to route around. Calling a tool you were not offered gets a refusal from the database,
+not a crash.
 
 ### Who you are, as distinct from which key you hold
 
-Work items are held under a lease by an **agent id**, sent on every request. It defaults to
-`<host>-<role>`, and `SUPERDEV_AGENT_ID` sets it.
+Work items are held under a lease by an **agent id**, sent on every request. It is derived from
+the grant's label and the role — `<label>-<role>` — which is stable across restarts, because a
+lease is held by an identity and one that changed on every reconnect would leave an agent unable
+to recognise its own in-flight work.
 
-**Several agents in one session share one server, and therefore one identity.** Pass a distinct
-`agent_id` on each work tool call, or they can release and finish each other's items. It changes
-who holds a claim, never what the key may do.
+**Several agents in one session share one connection, and therefore one identity.** Pass a
+distinct `agent_id` on each work tool call, or they can release and finish each other's items. It
+changes who holds a claim, never what the credential may do.
 
 **If the tools are missing, stop and say so.**  Do not fall back to writing backlog records into
 markdown files, and do not go looking for a database connection — a story that isn't in the

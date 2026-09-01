@@ -11,6 +11,69 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.11.0 — 2026-09-01
+
+**Breaking. Every install must re-key, and three tools are gone.** By the rule above this is a
+*major* change — tools were removed, which breaks agent definitions by name. It ships as `0.11.0`
+for the same reason 0.10.0 did: the backlog is invite-only beta, and `1.0.0` would promise a
+stability this has not earned. The break is announced here rather than encoded in a digit.
+
+**Requires** the backend deployed with migrations 049–051. Deploy it *before* installing this
+version: the manifest points at `/mcp/<role>`, and a deployment that does not serve those paths
+refuses every connection — which shows up as a plugin with no tools at all, not as an error.
+
+### The plugin no longer runs anything
+
+It is `plugin.json`, three agents, and the skills and reference they read. `mcp/dist/stdio.js` is
+gone with `mcp/src`, `node` is no longer needed on your PATH, and there is nothing to build or to
+verify. The four MCP servers are HTTP endpoints on the backlog's own deployment.
+
+### What to do
+
+Export three grants — one per role, each naming one role and one product — in the shell that
+launches Claude Code:
+
+```sh
+export SUPERDEV_GRANT_PRODUCT_MANAGER='pcat_live_…'
+export SUPERDEV_GRANT_ENGINEER='pcat_live_…'
+export SUPERDEV_GRANT_QUALITY_ASSURANCE='pcat_live_…'
+export SUPERDEV_GRANT='pcat_live_…'   # the unpinned server, optional
+```
+
+Issue them from the portal under **Machines**, which now hands you all three with the variable
+each belongs in. Your old grant will not work: it names no product, and probably allows more than
+one role. It remains valid for the REST registration path.
+
+`~/.superdev/config.json`, `<project>/.superdev/config.json`, and `SUPERDEV_API_KEY` are no longer
+read by anything. Nothing per-repository is: a manifest expands `${VAR}` only from the launching
+shell, which is why the product is on the credential.
+
+Run `claude mcp list | grep backlog` to check. A missing variable is named there; a refused
+credential shows as a server that does not connect.
+
+### Tools removed
+
+- **`backlog_doctor`** — it made no network call on purpose, which is exactly why it could not
+  survive being reached over the network. `skills/connect` does the diagnosis locally now.
+- **`backlog_drain_journal`**, **`backlog_journal_status`** — the journal is gone.
+
+### Behaviour removed
+
+**There is no offline path.** Reads are not cached and writes are not journalled. Both existed
+because the rest of a session kept working while the backlog was unreachable; every tool is now
+remote, so an agent that cannot reach the backlog cannot claim, heartbeat, or finish either. A
+buffered note would preserve no work to resume. This is a removal, and calling it anything else
+would be false.
+
+If you have an undrained journal on disk, drain it with 0.10.0 before upgrading.
+
+### Unchanged
+
+The four server names, so no custom agent's namespaces move. Every other tool's name, arguments,
+and description. The per-call `agent_id` override, which is still how subagents stay distinct —
+though the default is now derived from your grant's label rather than from your hostname, because
+a server cannot see a hostname.
+
 ## 0.10.0 — 2026-09-01
 
 **Breaking. Every tool and every MCP server is renamed.** By the rule above this is a *major*

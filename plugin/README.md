@@ -137,66 +137,71 @@ fails with an authentication error if you do not — for a public marketplace, o
 never pushed to GitHub, that is the common case. The HTTPS form was verified to work with SSH
 entirely disabled.
 
-The server is launched with **`node`**, which is the only thing this plugin needs on your PATH.
-It ships as a single bundle with its dependencies inlined, so there is nothing to install.
+The plugin ships **no code and no runtime**. It is a manifest naming four HTTPS endpoints on the
+backlog's own deployment, so there is nothing on your PATH to install and nothing to build.
 
-Then configure a key, at whichever scope fits. `superdev:connect` walks through the whole of
-this section interactively — which scope, how to get a key, and how to check it took. Highest
-precedence first:
+Then export a credential for each. `superdev:connect` walks through the whole of this section
+interactively — where to get them, where to put them, and how to check it took.
 
-| | Where | Good for |
+| Variable | Server | Role |
 |---|---|---|
-| 1 | `SUPERDEV_API_URL` / `SUPERDEV_API_KEY` in the environment | CI, one-off runs |
-| 2 | `<project>/.superdev/config.json` | a repository that works as one role |
-| 3 | `~/.superdev/config.json` | your keys, wherever you are |
+| `SUPERDEV_GRANT_PRODUCT_MANAGER` | `backlog-product-manager` | plans, authors the model |
+| `SUPERDEV_GRANT_ENGINEER` | `backlog-engineer` | builds |
+| `SUPERDEV_GRANT_QUALITY_ASSURANCE` | `backlog-quality-assurance` | verifies |
+| `SUPERDEV_GRANT` | `backlog` | the main thread, and driving the skills by hand |
 
-Levels merge **field by field**, so the arrangement most people want works: keys belong to you,
-the role belongs to the repository.
-
-```json
-// ~/.superdev/config.json          (mode 0600; config.json is gitignored, product.json is not)
-{ "api_url": "https://pando-catalog-api.fly.dev",
-  "keys": { "engineer": "pcat_live_…", "product-manager": "pcat_live_…" } }
-
-// <project>/.superdev/config.json
-{ "role": "engineer" }
+```sh
+# in ~/.zshrc or ~/.bashrc — read before Claude Code starts
+export SUPERDEV_GRANT_ENGINEER='pcat_live_…'
 ```
 
-### Getting a key
+Each holds an **orchestrator grant naming one role and one product**. The role and the product both
+come off the credential, never off the URL and never off anything an agent says, so a builder has
+no way to act as a planner and no way to reach another product. The server mints a twelve-hour key
+from the grant at the first call and replaces it before it lapses; no agent ever sees that key.
 
-**If you have an account, issue your own key at
-[superdev-portal.vercel.app](https://superdev-portal.vercel.app).** Sign in by emailed link, pick
-the product and the role, and the key is shown once — only its hash is stored, so it cannot be
-read back. You can revoke any key from the same page.
+**It must be exported in the shell that launches Claude Code.** A manifest expands `${VAR}` from
+there and nowhere else — not from `.claude/settings.json`, not from anything inside a repository —
+so a machine that works two products holds two sets of grants, and exporting inside a running
+session changes nothing until you restart it.
+
+### Getting the grants
+
+**If you have an account, issue them at
+[superdev-portal.vercel.app](https://superdev-portal.vercel.app).** Sign in by emailed link, name
+the machine, pick the product, and the set is shown once — only hashes are stored, so they cannot
+be read back. You can revoke any of them from the same page, and revoking one stops every key it
+has minted, instantly.
 
 **Accounts themselves are still created by hand**, because the isolation a public signup would
 have to promise is not finished — see [what is not true yet](#what-is-not-true-yet). The portal
-issues keys; it does not create accounts. If you want one:
+issues credentials; it does not create accounts. If you want one:
 
 **[Request access →](https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml)**
 
 You get back an account with a product in it, and a walk through `init` if you want one.
 
-If you operate your own backlog, a key is minted per holder with the owner database credential
-this plugin deliberately does not hold:
+If you operate your own backlog, mint them with the owner database credential this plugin
+deliberately does not hold — once per role:
 
 ```sh
 cd apps/backend
-DATABASE_URL=… bun run mint-key --role agent_engineer --label "alex laptop" --product reelmates
+DATABASE_URL=… bun run mint-grant --org pando --product reelmates \
+  --roles agent_engineer --label "alex laptop"
 ```
 
-The key is printed once and only its hash is stored. Losing it means minting a replacement and
-revoking the old one.
+Each is printed once, with the variable it belongs in. A grant that allows several roles, or that
+names no product, is still valid for `POST /v1/agents/register` but **cannot open a session** —
+the command says so at mint time rather than leaving you to discover it as an absent plugin.
 
-**With nothing configured the server still starts.** It registers every tool, and every one of
-them answers with the setup instructions — naming all three places it looked, on this machine —
-rather than doing anything. It holds no key, so it sends nothing anywhere. This is deliberate:
-the server used to exit, and a session with no `backlog_*` tools in it is indistinguishable from
-a broken install, several steps from the cause, with the one message that would have explained
-it discarded by the process that wrote it. Tools that are present and complaining are a missing
-key; tools that are absent are a server that did not start at all.
+**With nothing exported, the servers do not connect and the tools are simply absent.** That is a
+worse first-run experience than the local server's — it used to start unconfigured and answer
+every call with instructions naming the three files it had looked in — and it is the price of a
+transport where there is no local process to hold the explanation. `claude mcp list | grep backlog`
+is what recovers it: a missing variable is reported there by name, and `superdev:connect` reads it
+for you.
 
-Configuration is read **once, at startup**. A key written while a session is running takes
+Credentials are read **once, when Claude Code starts**. One exported into a running session takes
 effect at the next one.
 
 ## Running a fleet
@@ -221,12 +226,8 @@ therefore one identity — pass a distinct `agent_id` on each work tool call to 
 ## Structure
 
 ```
-.claude-plugin/plugin.json    declares the bundled MCP server
-mcp/
-  src/                        the server — client, tools, schema resources
-  dist/stdio.js               the committed single-file bundle, what actually runs
-  test/                       request-shape, surface, and bundle tests
-schemas/                      the five entity JSON Schemas, served as MCP resources
+.claude-plugin/plugin.json    declares four HTTP endpoints, one per role plus the unpinned one
+mcp/test/naming.test.ts       guards the surface this plugin ships against the old name
 reference/                    the entity model — what a good record looks like
   user-story.md     capability.md    feature.md
   acceptance-criteria.md             clause.md
@@ -244,9 +245,13 @@ A test asserts those lists against the role map, so the two cannot drift.
 `skills/execute/` bundles `atdd.md`, `testing-antipatterns.md`, and `git-worktrees.md`, loaded
 on demand rather than up front.
 
-`skills/connect/` is the one skill that is not part of the workflow: it is the first-run path,
-and the path back from a revoked key. It is what an unconfigured server's instructions are
-pointing at.
+`skills/connect/` is the one skill that is not part of the workflow: it is the first-run path, and
+the path back from a revoked or expired grant. It is also the only thing that can help when the
+tools are missing entirely, which is what a refused connection looks like.
+
+The tools themselves are not here. They live in `apps/backend/src/mcp` with the database they
+speak to — a tool's description is the quality bar for what gets written, and it belongs beside
+the constraints it is describing.
 
 ## What is not true yet
 
@@ -265,41 +270,26 @@ thing for you to depend on right now.
 - **No terms of service, privacy policy, or DPA yet.** They are being written. Until they exist,
   do not put anything in the backlog that would need them.
 
-## The backlog server
+## There is no server to trust
 
-`mcp/dist/stdio.js` is committed, and that is deliberate. A plugin installed from GitHub is a
-git checkout — no install step runs, so there is no `node_modules` for an import to resolve
-against. The bundle inlines its two dependencies, so the plugin works the instant it is cloned.
+This plugin ships no executable code. It is `plugin.json`, three agent definitions, and the
+skills and reference they read — nothing that runs on your machine, nothing on your PATH, no
+runtime, no bundle, and no dependencies at all.
 
-It is built `--target=node` and launched with `node`, so **`bun` is a development dependency of
-this repository and not a requirement of installing the plugin**. Nothing in `mcp/src` calls a
-Bun API — the server speaks `fetch`, `node:fs`, `node:os`, and `node:path` — so the runtime was
-only ever a build flag, while requiring Bun on a stranger's PATH made the most likely failure of
-a public install an MCP server that never connects. `bundle.test.ts` drives the committed bundle
-with whatever interpreter `plugin.json` names, so going back to a Bun-only bundle is a red test.
+That is a recent and deliberate change. The plugin used to ship `mcp/dist/stdio.js`, a committed
+build artifact, because a plugin installed from GitHub is a git checkout with no install step and
+therefore no `node_modules` to resolve against. A committed bundle is a stronger thing to ask a
+stranger to trust than an ordinary dependency — no registry, no version, no lockfile between
+whoever pushed it and what executes — and the honest caveat at the time was that you could not
+reproduce the build yourself from the mirrored repository.
 
-A committed build artifact is a stronger thing to ask you to trust than an ordinary dependency:
-there is no registry, no version, and no lockfile standing between whoever pushed it and what
-runs on your machine. What that is worth being clear about:
+Moving the server to the backlog's own deployment removes the question rather than answering it.
+What you now run locally is a JSON file. What executes is a service you reach over HTTPS with a
+credential you can revoke, and which holds a key of its own that lasts twelve hours.
 
-- **`mcp/src` ships beside `mcp/dist` in this repository**, so the program you execute and the
-  source it was built from arrive together and you can read the second.
-- **CI rebuilds the bundle from that source on every change and compares it byte for byte.** The
-  comparison runs on a pinned bun against a frozen lockfile, because a different bun emits a
-  different and perfectly correct bundle.
-- **You cannot currently reproduce that comparison yourself from this repository**, because the
-  lockfile and the pinned toolchain live in the source repository this one is mirrored from. That
-  is a real gap rather than a detail, and closing it means publishing a digest built from a tag —
-  it is tracked, not forgotten.
-
-If you are evaluating this and that matters to you, say so in an access request and you will get
-the commit and the lockfile to check against.
-
-It holds **one API key per role** and speaks HTTPS to the backlog API. It holds no database credential:
-a local plugin is the least trustworthy link in the chain, so compromising it yields a key
-scoped to a single role and revocable with one `UPDATE`, not a Postgres login. Authority is
-decided by the database — your key carries one role, and a refusal is a normal answer rather
-than a fault. Ask `backlog_whoami` when a write is refused.
+The trade is real and worth stating: you can no longer read the code that answers your tool calls
+by reading this repository, and there is no offline path — no cached reads, no journalled writes.
+When the backlog is unreachable, superdev stops.
 
 ### Working on it
 

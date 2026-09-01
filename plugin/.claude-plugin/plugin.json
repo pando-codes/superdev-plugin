@@ -1,84 +1,38 @@
 {
   "name": "superdev",
   "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the superdev backlog and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "author": {
     "name": "Alex",
     "email": "alex@pando.codes"
   },
   "mcpServers": {
     "backlog": {
-      "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
-      ],
-      "env": {
-        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
-        "SUPERDEV_API_KEY": "${SUPERDEV_API_KEY}",
-        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
-        "PANDO_CATALOG_API_KEY": "${PANDO_CATALOG_API_KEY}",
-        "SUPERDEV_ROLE": "${SUPERDEV_ROLE}",
-        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
-        "SUPERDEV_CONFIG": "${SUPERDEV_CONFIG}",
-        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
-        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SUPERDEV_GRANT}"
       }
     },
     "backlog-product-manager": {
-      "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
-      ],
-      "env": {
-        "SUPERDEV_PINNED_ROLE": "product-manager",
-        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
-        "SUPERDEV_GRANT": "${SUPERDEV_GRANT}",
-        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
-        "PANDO_CATALOG_GRANT": "${PANDO_CATALOG_GRANT}",
-        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
-        "SUPERDEV_PRODUCT": "${SUPERDEV_PRODUCT}",
-        "SUPERDEV_PRODUCT_CONFIG": "${SUPERDEV_PRODUCT_CONFIG}",
-        "SUPERDEV_KEY_TTL_MINUTES": "${SUPERDEV_KEY_TTL_MINUTES}",
-        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
-        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/product-manager",
+      "headers": {
+        "Authorization": "Bearer ${SUPERDEV_GRANT_PRODUCT_MANAGER}"
       }
     },
     "backlog-engineer": {
-      "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
-      ],
-      "env": {
-        "SUPERDEV_PINNED_ROLE": "engineer",
-        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
-        "SUPERDEV_GRANT": "${SUPERDEV_GRANT}",
-        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
-        "PANDO_CATALOG_GRANT": "${PANDO_CATALOG_GRANT}",
-        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
-        "SUPERDEV_PRODUCT": "${SUPERDEV_PRODUCT}",
-        "SUPERDEV_PRODUCT_CONFIG": "${SUPERDEV_PRODUCT_CONFIG}",
-        "SUPERDEV_KEY_TTL_MINUTES": "${SUPERDEV_KEY_TTL_MINUTES}",
-        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
-        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/engineer",
+      "headers": {
+        "Authorization": "Bearer ${SUPERDEV_GRANT_ENGINEER}"
       }
     },
     "backlog-quality-assurance": {
-      "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/stdio.js"
-      ],
-      "env": {
-        "SUPERDEV_PINNED_ROLE": "quality-assurance",
-        "SUPERDEV_API_URL": "${SUPERDEV_API_URL}",
-        "SUPERDEV_GRANT": "${SUPERDEV_GRANT}",
-        "PANDO_CATALOG_API_URL": "${PANDO_CATALOG_API_URL}",
-        "PANDO_CATALOG_GRANT": "${PANDO_CATALOG_GRANT}",
-        "SUPERDEV_AGENT_ID": "${SUPERDEV_AGENT_ID}",
-        "SUPERDEV_PRODUCT": "${SUPERDEV_PRODUCT}",
-        "SUPERDEV_PRODUCT_CONFIG": "${SUPERDEV_PRODUCT_CONFIG}",
-        "SUPERDEV_KEY_TTL_MINUTES": "${SUPERDEV_KEY_TTL_MINUTES}",
-        "SUPERDEV_HOME": "${SUPERDEV_HOME}",
-        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/quality-assurance",
+      "headers": {
+        "Authorization": "Bearer ${SUPERDEV_GRANT_QUALITY_ASSURANCE}"
       }
     }
   }

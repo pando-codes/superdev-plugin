@@ -40,8 +40,21 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const SRC = join(import.meta.dir, "..", "src");
-const SCHEMAS = join(import.meta.dir, "..", "..", "schemas");
+/**
+ * WHAT THIS GUARDS NOW
+ *
+ * The plugin has no TypeScript left — the server moved to apps/backend when the
+ * transport went remote — so the two directories this originally scanned are
+ * gone. What remains here is the surface an installed plugin actually presents:
+ * the manifest that names four servers, the three agents that address them, and
+ * the skills and reference that tell a reader what to call. Those are the files
+ * a rename would break in a way nothing compiles, and they are precisely the
+ * ones a compiler was never going to catch.
+ */
+const PLUGIN = join(import.meta.dir, "..", "..");
+const SURFACE = [".claude-plugin", "agents", "skills", "reference"].map((d) =>
+  join(PLUGIN, d),
+);
 
 const FENCE = [
   "PANDO_CATALOG_API_URL",
@@ -58,6 +71,12 @@ const FENCE = [
   // of v1, so a line naming one is allowed to say "catalog" and must not be
   // swept by the next rename.
   "/v1/products/",
+  // An identifier this repository does not own. CLAUDE.md draws the line
+  // explicitly — `pg_catalog` is Postgres's, `catalog-access` is agent-suite's,
+  // and renaming an address does not rename the thing it addresses. This one is
+  // a class in a testing example that has nothing to do with the backlog, and a
+  // sweep that "fixed" it would be corrupting somebody else's name.
+  "ToolCatalog",
 ];
 
 function filesMatching(dir: string, extension: string): string[] {
@@ -82,10 +101,10 @@ function scan(root: string, files: string[]) {
   }
 }
 
-describe("no source identifier says catalog", () => {
-  scan(SRC, filesMatching(SRC, ".ts"));
+describe("nothing the manifest declares says catalog", () => {
+  for (const dir of SURFACE) scan(PLUGIN, filesMatching(dir, ".json"));
 });
 
-describe("no schema identifier says catalog", () => {
-  scan(SCHEMAS, filesMatching(SCHEMAS, ".json"));
+describe("nothing the plugin ships as prose says catalog", () => {
+  for (const dir of SURFACE) scan(PLUGIN, filesMatching(dir, ".md"));
 });
