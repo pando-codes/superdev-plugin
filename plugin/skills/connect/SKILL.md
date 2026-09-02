@@ -17,19 +17,21 @@ expired identity, or a project that should be working a different product than i
 ## What binds a project
 
 superdev is **product-scoped**, and a repository is where a product lives. So the credential is
-per-project, not per-machine: a **product identity** is issued for one product, and it goes in that
-repository's own `.mcp.json`.
+per-project, not per-machine: a **product identity** is issued for one product, and registered for
+that project at **local scope** — stored against the project path in `~/.claude.json`, outside the
+working tree, where nothing can commit it.
 
 Nothing is bound until you do this. A fresh install of superdev has skills and agents and **no
 backlog tools at all** — which is correct, because a repository nobody has bound to a product has
 no backlog to reach.
 
-**Why not an environment variable.** Claude Code expands `${VAR}` in an MCP manifest only from the
+**Why not an environment variable.** Claude Code expands `${VAR}` in an MCP entry only from the
 shell that launched it — not from `.claude/settings.json`, not from anything inside a repository,
 even though a `settings.json` `env` value does reach the session and shows up in `printenv`. This
 was tested, not assumed; the method is in `docs/designs/effort-http-mcp-transport.md`, Appendix A.
 A shell variable is therefore machine-global, and a machine working two products needs two
-identities. So the credential goes in the file, as a literal, and the file is ignored by git.
+identities. So the credential is registered per project, as a literal, at local scope — stored
+outside the repository where nothing can commit it.
 
 ## Step 0: Find out what is actually wrong
 
@@ -38,13 +40,12 @@ it exists to diagnose answers nothing in the one case it is for. Diagnose locall
 project directory:
 
 ```sh
-ls .mcp.json 2>/dev/null && echo "bound" || echo "not bound"
 claude mcp list 2>&1 | grep -i backlog
 ```
 
 | What you see | What it means | Where to go |
 |---|---|---|
-| No `.mcp.json`, no `backlog` servers | This repository is not bound to a product yet | Step 1 |
+| No `backlog` servers listed | This repository is not bound to a product yet | Step 1 |
 | Servers listed, `✔ Connected` | Working. Confirm with `backlog_whoami` and **stop** | — |
 | Servers listed, not connected | A credential is present and the server refused it | "Reading a refusal" |
 | `⏸ Pending approval` | Project-scoped servers need approving once, interactively | Run `claude` and approve |
@@ -113,60 +114,68 @@ If the user has no account, the hosted backlog is invite-only. Give them the lin
 https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml
 ```
 
-## Step 2: Write it into this project
+## Step 2: Register it for this project, at local scope
 
-Create `.mcp.json` at the repository root, with the identity as a literal. The four entries and
-their URLs come from `servers.json` in the plugin — copy them exactly; the server **names** are
-what every agent's frontmatter addresses, and renaming one gives that agent no tools.
-
-```json
-{
-  "mcpServers": {
-    "backlog": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp",
-      "headers": { "Authorization": "Bearer pcat_live_…" }
-    },
-    "backlog-product-manager": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/product-manager",
-      "headers": { "Authorization": "Bearer pcat_live_…" }
-    },
-    "backlog-engineer": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/engineer",
-      "headers": { "Authorization": "Bearer pcat_live_…" }
-    },
-    "backlog-quality-assurance": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/quality-assurance",
-      "headers": { "Authorization": "Bearer pcat_live_…" }
-    }
-  }
-}
-```
-
-The same value in all four. They differ only by URL, and the URL is what binds the role.
-
-**Then ignore it.** This file contains a live credential:
+Four commands, run from the repository root. The identity goes in as a literal — the same value in
+all four, which differ only by URL, and the URL is what binds the role.
 
 ```sh
-grep -qxF '.mcp.json' .gitignore || echo '.mcp.json' >> .gitignore
+B=https://pando-catalog-api.fly.dev
+ID='pcat_live_…'
+for entry in "backlog:/mcp" \
+             "backlog-product-manager:/mcp/product-manager" \
+             "backlog-engineer:/mcp/engineer" \
+             "backlog-quality-assurance:/mcp/quality-assurance"; do
+  claude mcp add --scope local --transport http "${entry%%:*}" "$B${entry#*:}" \
+    --header "Authorization: Bearer $ID"
+done
 ```
 
-Do this in the same step, not afterwards. A `.mcp.json` is ordinarily a committed, shared file —
-that is what project scope is for — and this one is the exception because it carries a secret. An
-identity that reaches a public repository has to be revoked and reissued.
+The names and paths come from `servers.json` in this plugin. **Copy them exactly**: the server
+names are what every agent's frontmatter addresses, and renaming one gives that agent no tools.
 
-**Restart Claude Code**, then approve the servers when prompted: project-scoped servers are
-approved once, interactively, and that prompt is the only thing standing between a checked-out
-repository and a server definition you did not write.
+### Why local scope and not a `.mcp.json` in the repository
+
+`--scope local` stores this in `~/.claude.json`, keyed by project path. It is per-project in every
+way that matters and it is **not in the working tree**, which is what a credential needs. Three
+consequences, and each of them is a thing that goes wrong the other way:
+
+- **It cannot be committed.** There is no file to gitignore and no gitignore line to forget. A
+  credential written into `.mcp.json` is one `git add -A` away from a public repository.
+- **It cannot collide with the repository's own MCP config.** Plenty of projects legitimately
+  commit a `.mcp.json` for servers a team shares. Writing superdev's entries into that file means
+  editing a shared, committed file to put a secret in it, and gitignoring it afterwards breaks it
+  for everyone else.
+- **It outranks anything the repository declares.** Precedence is local → project → user → plugin,
+  so a checked-out repository cannot redefine `backlog-engineer` to point at another role's
+  endpoint. That was a real hole while these entries lived lower down: project scope beats plugin
+  scope, and the approval prompt that guards it is skipped in `claude -p` and under
+  `bypassPermissions`. At local scope the hole is closed, because the highest-precedence
+  definition is the one the operator wrote themselves.
+
+**If a repository already has a `.mcp.json` naming a `backlog*` server, remove those entries** —
+`claude mcp remove <name> -s project` — or the two definitions conflict and Claude Code will say
+so, naming both scopes. Leave every other server in that file alone; they are not yours.
+
+### Migrating a project bound the old way
+
+Releases before 0.14.0 told you to write `.mcp.json` yourself. Those projects keep working —
+project scope still resolves — but they are carrying a credential in the working tree. To move one:
+
+```sh
+python3 -c "import json;print(json.load(open('.mcp.json'))['mcpServers']['backlog-engineer']['headers']['Authorization'].split()[1])"
+```
+
+Take that value, run Step 2 with it, then delete the four `backlog*` entries from `.mcp.json` — and
+the whole file if they were all it held. Restart afterwards.
 
 ## Step 3: Verify
 
 ```sh
 claude mcp list 2>&1 | grep -i backlog
 ```
+
+Restart Claude Code first — the configuration is read once, when it starts.
 
 Four `✔ Connected`, then `backlog_whoami` in the session. It should report the product the identity
 names, and the role the namespace implies — `mcp__backlog-engineer__*` is the engineer whatever

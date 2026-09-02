@@ -145,32 +145,25 @@ the first thing to run in any project.
 
 superdev declares no MCP servers of its own. A product identity is per-project, a plugin manifest
 is per-install, and a credential belonging to one repository has no business in a file every
-repository shares. So the four servers are written into that repository's own `.mcp.json`, with the
-identity as a literal:
+repository shares. So the four servers are registered for that project at **local scope**:
 
-```json
-{
-  "mcpServers": {
-    "backlog-engineer": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/engineer",
-      "headers": { "Authorization": "Bearer pcat_live_…" }
-    }
-  }
-}
+```sh
+claude mcp add --scope local --transport http backlog-engineer \
+  https://pando-catalog-api.fly.dev/mcp/engineer \
+  --header "Authorization: Bearer pcat_live_…"
 ```
 
 Four entries, the same credential in each, differing only by URL — and the URL is what binds the
 role. `servers.json` in this plugin is the template, and its server **names** are what every
 agent's frontmatter addresses.
 
-**`.mcp.json` must be gitignored.** It is ordinarily a committed, shared file; this one carries a
-secret, and an identity that reaches a public repository has to be revoked.
+**Local scope keeps the credential out of the working tree.** It is stored against the project path
+in `~/.claude.json`: nothing to gitignore, nothing to collide with a repository's own committed
+`.mcp.json`, and nothing a `git add -A` can publish. It also outranks anything the repository
+declares, so a checked-out repo cannot redefine `backlog-engineer` to point somewhere else.
 
 **A fresh install has no backlog tools at all**, which is correct: a repository nobody has bound to
-a product has no backlog to reach. Project-scoped servers are also approved once, interactively —
-that prompt is what stands between a checked-out repository and a server definition you did not
-write.
+a product has no backlog to reach.
 
 It holds a **product identity**: a credential naming one product and carrying a ceiling of roles —
 planner, builder, verifier.

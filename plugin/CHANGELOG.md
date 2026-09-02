@@ -11,6 +11,27 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.14.0 — 2026-09-02
+
+**Your credential no longer goes in the repository.** No tool changes; nothing to re-issue.
+
+`/superdev:connect` now registers the four servers at **local scope** —
+`claude mcp add --scope local` — instead of writing `.mcp.json` into your project.
+
+Why: plenty of repositories already commit a `.mcp.json` for servers a team shares, and 0.13.0's
+instruction would have overwritten them. Even done carefully it meant putting a secret in a
+committed file and gitignoring a file other people rely on.
+
+Local scope is stored against the project path in `~/.claude.json`. It is per-project, it is
+outside the working tree — no gitignore to forget, nothing a `git add -A` can publish — and it
+**outranks anything the repository declares**, so a checked-out repo cannot redefine
+`backlog-engineer` to point at another role's endpoint.
+
+### If you bound a project under 0.13.0
+
+It keeps working. To move it, take the identity out of `.mcp.json`, run Step 2 of `connect` with
+it, then delete the four `backlog*` entries — and the file, if that is all it held. Restart after.
+
 ## 0.13.0 — 2026-09-01
 
 **Also in this release: a user identity, so `connect` can bind a project itself.**

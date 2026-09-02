@@ -7,8 +7,10 @@ the store will accept.
 ## Reaching it
 
 This plugin ships **no server and declares no MCP servers**. A repository gets them by being bound
-to a product: `/superdev:connect` writes four HTTP entries into that repository's own `.mcp.json`,
-pointing at the backlog's deployment. The tools below are the whole of the backlog surface — there
+to a product: `/superdev:connect` registers four HTTP entries for that project at **local scope**,
+pointing at the backlog's deployment. Local scope lives against the project path in
+`~/.claude.json` — per-project, outside the working tree, and higher precedence than anything the
+repository itself declares. The tools below are the whole of the backlog surface — there
 is no second path and you should not construct one.
 
 | Server | Endpoint | Acts as |
