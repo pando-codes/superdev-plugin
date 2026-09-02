@@ -63,8 +63,35 @@ another product.
 ### If a user identity is available, mint one here
 
 A **user identity** is the tier above: a credential that signs product identities for products in
-its account and can read or write nothing itself. It is kept in the user's shell profile because it
-belongs to the person rather than to any repository.
+its account, **creates those products**, and can read or write nothing itself. It is kept in the
+user's shell profile because it belongs to the person rather than to any repository.
+
+**Which product?** Ask this credential rather than asking the user to remember:
+
+```sh
+curl -sS https://pando-catalog-api.fly.dev/v1/orchestrator/products \
+  -H "authorization: Bearer $SUPERDEV_USER_IDENTITY"
+```
+
+Key and name for every product in the account. If the repository carries
+`.superdev/product.json`, that names the one it is already bound to and should agree; if it does
+not exist yet, offer the list and let the user choose, or create it below.
+
+A product identity gets a 403 here — it acts in one product and enumerates none — so this only
+works with a user identity, which is the point.
+
+If the product does not exist yet, this is the credential that makes it — no MCP session can, since
+every session runs on a product-scoped key and creating a product requires a connection scoped to
+none:
+
+```sh
+curl -sS -X POST https://pando-catalog-api.fly.dev/v1/orchestrator/products \
+  -H "authorization: Bearer $SUPERDEV_USER_IDENTITY" -H 'content-type: application/json' \
+  -d '{"product_key":"<key>","name":"<Name>","repo":"<git remote>"}'
+```
+
+It answers 200 with `created: false` if the product already exists, which is the ordinary case for
+a second checkout rather than an error.
 
 ```sh
 [ -n "$SUPERDEV_USER_IDENTITY" ] && echo "available" || echo "not set"

@@ -160,7 +160,6 @@ own binding and its own init.
 | Tool | Answers |
 |---|---|
 | `backlog_whoami` | which role this key carries, and which product it may write |
-| `backlog_list_products` | every product in the backlog |
 | `backlog_list_capabilities` | a product's capabilities, optionally filtered by `status` |
 | `backlog_get_capability` | one capability, its features, and its computed weight |
 | `backlog_list_features` | a product's features, optionally filtered by `lifecycle_state` |

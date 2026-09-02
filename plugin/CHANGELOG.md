@@ -11,6 +11,27 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.16.0 — 2026-09-02
+
+**`backlog_list_products` is removed.** Since 031 it returned only the product your credential is
+scoped to — one row your session already knew — while being named as though it could list the
+account. That gap is how you conclude a product does not exist when it does.
+
+**If a custom agent lists `backlog_list_products`, remove it.** A stale identifier gives that agent
+silently fewer tools rather than an error.
+
+Enumerating an account is now a **user identity's** job, alongside creating products and signing
+identities:
+
+```sh
+curl -sS https://pando-catalog-api.fly.dev/v1/orchestrator/products \
+  -H "authorization: Bearer $SUPERDEV_USER_IDENTITY"
+```
+
+`connect` uses it — it offers you the account's products instead of asking you to remember one.
+
+**Requires** the backend deployed with migration 056.
+
 ## 0.15.0 — 2026-09-02
 
 **`backlog_create_product` is removed.** It was offered to planners and heads of engineering and
