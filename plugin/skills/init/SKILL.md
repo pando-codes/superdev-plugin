@@ -182,16 +182,29 @@ starting backlog than eight speculative ones — capabilities are cheap to add l
 ## Step 3: Write
 
 **On the fill-in-the-product path, skip straight to the capabilities.** The product row already
-exists, `backlog_create_product` would be refused, and the product key to pass is the one
+exists, creating it again would be refused, and the product key to pass is the one
 `backlog_whoami` reported under `writes.product_key`.
 
-Otherwise write the Product first with **`backlog_create_product`** (`key`, `name`), then each
+Otherwise the Product has to exist first — and **no MCP session can create one**. A session runs
+on a derived key, every derived key is product-scoped, and 027's insert policy requires an
+explicitly unscoped connection. Creating a product belongs to the tiers whose reach is an account:
+
+```sh
+curl -sS -X POST https://pando-catalog-api.fly.dev/v1/orchestrator/products \
+  -H "authorization: Bearer $SUPERDEV_USER_IDENTITY" \
+  -H 'content-type: application/json' \
+  -d '{"product_key":"<key>","name":"<Name>","repo":"<git remote>"}'
+```
+
+That route authenticates a **user identity** rather than a key, and answers 200 with
+`created: false` if the product already exists — which is the ordinary case for a second checkout,
+not an error. Without a user identity, create it in the portal. Then each
 Capability with **`backlog_create_capability`**, passing the new product's `product_key`.
 
 Per capability: `key`, `name`, `description`, `scope_boundary`, `vbo`,
 `status` = `active`, `visibility` = `internal`.
 
-The product must exist before any capability can name it, and `backlog_create_product` is the
+The product must exist before any capability can name it, and the route above is the
 one call in this workflow with no undo — there is no tool to rename or delete a product, because
 its key scopes every other row in the backlog.  Read the tool's description before calling it.
 

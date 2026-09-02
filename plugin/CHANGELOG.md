@@ -11,6 +11,32 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.15.0 — 2026-09-02
+
+**`backlog_create_product` is removed.** It was offered to planners and heads of engineering and
+could never succeed: an MCP session runs on a product-scoped key, and creating a product requires a
+connection scoped to none.
+
+Create one with a **user identity** instead — they are now issued able to:
+
+```sh
+curl -sS -X POST https://pando-catalog-api.fly.dev/v1/orchestrator/products \
+  -H "authorization: Bearer $SUPERDEV_USER_IDENTITY" -H 'content-type: application/json' \
+  -d '{"product_key":"<key>","name":"<Name>","repo":"<git remote>"}'
+```
+
+Or in the portal. `init` now says this, and binding a fresh repository no longer needs a browser.
+
+**If you have a custom agent listing `backlog_create_product`, remove it** — the tool is gone, and
+a stale identifier gives that agent silently fewer tools rather than an error.
+
+**Fixed: the unpinned `backlog` server was stealing `backlog-product-manager`'s key.** Both bound
+the same role with the same identity, and registering revokes any prior key for it, so they took
+turns working. The unpinned endpoint now has its own identity. Nothing to re-issue.
+
+**Reissue your user identity** if you want it to create products — existing ones were issued
+without that power.
+
 ## 0.14.0 — 2026-09-02
 
 **Your credential no longer goes in the repository.** No tool changes; nothing to re-issue.
