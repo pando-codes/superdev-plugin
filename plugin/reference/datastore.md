@@ -6,32 +6,31 @@ the store will accept.
 
 ## Reaching it
 
-This plugin ships **no server**. It is a manifest naming four HTTP endpoints on the backlog's own
-deployment, and the tools below are the whole of the backlog surface — there is no second path and
-you should not construct one.
+This plugin ships **no server and declares no MCP servers**. A repository gets them by being bound
+to a product: `/superdev:connect` writes four HTTP entries into that repository's own `.mcp.json`,
+pointing at the backlog's deployment. The tools below are the whole of the backlog surface — there
+is no second path and you should not construct one.
 
-Each entry carries one credential, read from an environment variable:
-
-| Server | Endpoint | Credential |
+| Server | Endpoint | Acts as |
 |---|---|---|
-| `backlog` | `/mcp` | `SUPERDEV_GRANT` |
-| `backlog-product-manager` | `/mcp/product-manager` | `SUPERDEV_GRANT_PRODUCT_MANAGER` |
-| `backlog-engineer` | `/mcp/engineer` | `SUPERDEV_GRANT_ENGINEER` |
-| `backlog-quality-assurance` | `/mcp/quality-assurance` | `SUPERDEV_GRANT_QUALITY_ASSURANCE` |
+| `backlog` | `/mcp` | the identity's primary role — the first in its ceiling |
+| `backlog-product-manager` | `/mcp/product-manager` | product-manager |
+| `backlog-engineer` | `/mcp/engineer` | engineer |
+| `backlog-quality-assurance` | `/mcp/quality-assurance` | quality-assurance |
 
-Each variable holds an **orchestrator grant naming exactly one role and exactly one product**. Both
-halves come off the credential, so neither is ever something a caller says: the endpoint reads the
-role from the grant rather than from the URL it was reached by, and the path exists only to keep
-the four entries distinct endpoints.
+All four carry the same credential, a **product identity**: one product, and a ceiling of roles.
 
-The grant is a minting authority, not a key. At the first call the server mints a short-lived,
+The **product** comes off the credential and can come from nowhere else. The **role** is named by
+the URL each server is declared at and is bounded by that ceiling — a path outside it is refused.
+Neither is a value a caller sends: no tool takes a role argument, and the role is fixed for the
+life of the connection.
+
+The identity is a minting authority, not a key. At the first call the server mints a short-lived,
 role-bound, product-scoped key from it, holds it, and replaces it before it lapses. **No agent ever
 sees that key**, and there is nothing to rotate by hand.
 
-A variable must be exported in the shell that launches Claude Code. A manifest expands `${VAR}`
-from there and nowhere else — not from `.claude/settings.json`, not from anything per-repository.
-If the `backlog_*` tools are not in the session, that is almost always why; run
-`claude mcp list | grep backlog` and use the `connect` skill.
+**If the `backlog_*` tools are not in this session, this repository is probably not bound.** That
+is the ordinary state of a fresh checkout, not a fault. Run `/superdev:connect`.
 
 ### There is no offline path
 

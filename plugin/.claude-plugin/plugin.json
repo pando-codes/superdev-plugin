@@ -1,39 +1,9 @@
 {
   "name": "superdev",
   "description": "Turn ideas into working code through a brainstorm, plan, execute, and evaluate workflow, and let agents pull well-defined work from the superdev backlog and push updates back. Role-scoped, leased, and safe for several agents at once. Follows the principles of ATDD and the Agile SDLC.",
-  "version": "0.11.0",
+  "version": "0.13.0",
   "author": {
     "name": "Alex",
     "email": "alex@pando.codes"
-  },
-  "mcpServers": {
-    "backlog": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SUPERDEV_GRANT}"
-      }
-    },
-    "backlog-product-manager": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/product-manager",
-      "headers": {
-        "Authorization": "Bearer ${SUPERDEV_GRANT_PRODUCT_MANAGER}"
-      }
-    },
-    "backlog-engineer": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/engineer",
-      "headers": {
-        "Authorization": "Bearer ${SUPERDEV_GRANT_ENGINEER}"
-      }
-    },
-    "backlog-quality-assurance": {
-      "type": "http",
-      "url": "https://pando-catalog-api.fly.dev/mcp/quality-assurance",
-      "headers": {
-        "Authorization": "Bearer ${SUPERDEV_GRANT_QUALITY_ASSURANCE}"
-      }
-    }
   }
 }

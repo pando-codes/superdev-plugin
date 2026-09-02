@@ -140,38 +140,63 @@ entirely disabled.
 The plugin ships **no code and no runtime**. It is a manifest naming four HTTPS endpoints on the
 backlog's own deployment, so there is nothing on your PATH to install and nothing to build.
 
-Then export a credential for each. `superdev:connect` walks through the whole of this section
-interactively — where to get them, where to put them, and how to check it took.
+Then **bind a repository to a product**. `superdev:connect` does the whole of this section — it is
+the first thing to run in any project.
 
-| Variable | Server | Role |
-|---|---|---|
-| `SUPERDEV_GRANT_PRODUCT_MANAGER` | `backlog-product-manager` | plans, authors the model |
-| `SUPERDEV_GRANT_ENGINEER` | `backlog-engineer` | builds |
-| `SUPERDEV_GRANT_QUALITY_ASSURANCE` | `backlog-quality-assurance` | verifies |
-| `SUPERDEV_GRANT` | `backlog` | the main thread, and driving the skills by hand |
+superdev declares no MCP servers of its own. A product identity is per-project, a plugin manifest
+is per-install, and a credential belonging to one repository has no business in a file every
+repository shares. So the four servers are written into that repository's own `.mcp.json`, with the
+identity as a literal:
 
-```sh
-# in ~/.zshrc or ~/.bashrc — read before Claude Code starts
-export SUPERDEV_GRANT_ENGINEER='pcat_live_…'
+```json
+{
+  "mcpServers": {
+    "backlog-engineer": {
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/engineer",
+      "headers": { "Authorization": "Bearer pcat_live_…" }
+    }
+  }
+}
 ```
 
-Each holds an **orchestrator grant naming one role and one product**. The role and the product both
-come off the credential, never off the URL and never off anything an agent says, so a builder has
-no way to act as a planner and no way to reach another product. The server mints a twelve-hour key
-from the grant at the first call and replaces it before it lapses; no agent ever sees that key.
+Four entries, the same credential in each, differing only by URL — and the URL is what binds the
+role. `servers.json` in this plugin is the template, and its server **names** are what every
+agent's frontmatter addresses.
 
-**It must be exported in the shell that launches Claude Code.** A manifest expands `${VAR}` from
-there and nowhere else — not from `.claude/settings.json`, not from anything inside a repository —
-so a machine that works two products holds two sets of grants, and exporting inside a running
-session changes nothing until you restart it.
+**`.mcp.json` must be gitignored.** It is ordinarily a committed, shared file; this one carries a
+secret, and an identity that reaches a public repository has to be revoked.
 
-### Getting the grants
+**A fresh install has no backlog tools at all**, which is correct: a repository nobody has bound to
+a product has no backlog to reach. Project-scoped servers are also approved once, interactively —
+that prompt is what stands between a checked-out repository and a server definition you did not
+write.
 
-**If you have an account, issue them at
-[superdev-portal.vercel.app](https://superdev-portal.vercel.app).** Sign in by emailed link, name
-the machine, pick the product, and the set is shown once — only hashes are stored, so they cannot
-be read back. You can revoke any of them from the same page, and revoking one stops every key it
-has minted, instantly.
+It holds a **product identity**: a credential naming one product and carrying a ceiling of roles —
+planner, builder, verifier.
+
+| Server | Acts as |
+|---|---|
+| `backlog-product-manager` | plans, authors the model |
+| `backlog-engineer` | builds |
+| `backlog-quality-assurance` | verifies |
+| `backlog` | the identity's primary role — the main thread, and driving the skills by hand |
+
+The **product** is on the credential and can be nowhere else. The **role** is named by the URL each
+server is declared at, and bounded by the ceiling — a path outside it is refused. Neither half is a
+value an agent emits. (The schema and the CLI say `grant`; those names are frozen.)
+
+The identity is a minting authority, not a key: the server mints a twelve-hour, role-bound,
+product-scoped key from it at the first call and replaces it before it lapses. No agent ever sees
+that key.
+
+### Getting a product identity
+
+**If you have an account, issue one at
+[superdev-portal.vercel.app](https://superdev-portal.vercel.app).** Sign in by emailed link, pick
+the product, name the machine, and it is shown once — only a hash is stored, so it cannot be
+read back. You can revoke it from the same page, and revoking stops every key it has minted,
+instantly.
 
 **Accounts themselves are still created by hand**, because the isolation a public signup would
 have to promise is not finished — see [what is not true yet](#what-is-not-true-yet). The portal

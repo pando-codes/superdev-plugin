@@ -11,6 +11,100 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.13.0 — 2026-09-01
+
+**Also in this release: a user identity, so `connect` can bind a project itself.**
+
+Export one and `/superdev:connect` signs each project's product identity for you, instead of
+sending you to the portal and asking you to paste:
+
+```sh
+export SUPERDEV_USER_IDENTITY='pcat_live_…'
+```
+
+It signs product identities within its own ceiling and **reads or writes nothing** — it holds no
+role and cannot open an MCP session. What it signs cannot sign anything further, and cannot outlive
+it. Issue one with `mint-grant --may-issue-identities`, or keep using the portal.
+
+### The project binding, in the same release
+
+**Breaking twice: every tool is renamed, and every project must be bound.** No migration.
+
+A product identity is per-project now. The plugin declares **no MCP servers**; `/superdev:connect`
+writes four HTTP entries into your repository's own `.mcp.json` with the identity as a literal, and
+adds that file to `.gitignore` — it holds a live credential.
+
+### What you have to do, per repository
+
+Run `/superdev:connect` in each project and give it a product identity. Issue one from the portal
+under **Product identities**, or with `mint-grant --product`. `SUPERDEV_GRANT` is no longer read by
+anything.
+
+### Every tool is renamed
+
+```
+mcp__plugin_superdev_backlog-engineer__…   →   mcp__backlog-engineer__…
+```
+
+Project-scoped servers do not carry the `plugin_` segment — only bundled ones do. The three shipped
+agents moved with it, but **anything of yours that names a superdev tool must be updated**: a
+custom agent's `tools:` list, a hook matcher, a permission rule. A stale identifier produces an
+agent with silently fewer tools rather than an error, so it is worth grepping for.
+
+### A fresh install has no backlog tools
+
+Correct, not broken: a repository nobody has bound to a product has no backlog to reach. You will
+also be asked to approve the servers once, interactively — project-scoped servers always are, and
+that prompt is worth having.
+
+## 0.12.0 — 2026-09-01
+
+**Breaking: one credential replaces three.** No tool, argument, or description changed.
+
+A product identity now carries a **ceiling of roles** rather than exactly one, and each of the four
+servers binds a role from the URL it is declared at. So there is one thing to issue, one thing to
+paste, and one thing to rotate.
+
+```sh
+export SUPERDEV_GRANT='pcat_live_…'
+```
+
+`SUPERDEV_GRANT_PRODUCT_MANAGER`, `SUPERDEV_GRANT_ENGINEER` and `SUPERDEV_GRANT_QUALITY_ASSURANCE`
+are no longer read. **A credential issued under 0.11.x still works** — a ceiling of one is still a
+ceiling — so if you already set one up, move its value to `SUPERDEV_GRANT` and it will connect as
+that role everywhere its ceiling allows.
+
+The unpinned `backlog` server acts as the identity's **primary role**, the first one it was issued
+with. The portal and `mint-grant` order them planner-first.
+
+### Why the split went away
+
+Requiring one role per credential never stopped a checked-out repository redefining a server entry
+to point at another role's path with another role's variable — project scope outranks plugin scope
+and the approval prompt is skipped in headless runs. And three values exported from one shell
+profile leak together. What holds the boundary is that a role is named by a file on disk, bounded
+by the database, and fixed for the life of the connection. All three are unchanged.
+
+**Requires** the backend deployed from 0.12.0. No migration.
+
+## 0.11.1 — 2026-09-01
+
+**Naming only. No tool, argument, or credential changes, and nothing to re-key.**
+
+What you export is now called a **product identity**: a credential scoped to one product and one
+role, that mints the short-lived keys an agent runs on. It was described as a "machine grant",
+which stopped being true at 0.11.0 — the product moved onto the credential, so the unit is one per
+`(product, role)` and the machine survives as a label.
+
+The environment variables are unchanged and always will be: `SUPERDEV_GRANT`,
+`SUPERDEV_GRANT_ENGINEER`, `SUPERDEV_GRANT_PRODUCT_MANAGER`, `SUPERDEV_GRANT_QUALITY_ASSURANCE`.
+They are inside every published manifest, so renaming them would break every install. The schema
+and `mint-grant` also still say *grant*.
+
+`skills/connect`, the README, and `reference/datastore.md` say *product identity*. In the portal
+the section is now **Product identities**, and each row names its product and role rather than
+just a machine.
+
 ## 0.11.0 — 2026-09-01
 
 **Breaking. Every install must re-key, and three tools are gone.** By the rule above this is a

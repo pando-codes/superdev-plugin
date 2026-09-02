@@ -1,113 +1,166 @@
 ---
 name: connect
-description: You MUST use this when the backlog_* tools are missing from the session, when they answer with a credential error, or when the user asks to configure, connect, or re-key superdev. Walks through exporting the right grants into the right shell and verifying them, and diagnoses the case where the tools never appeared at all.
+description: You MUST use this when the backlog_* tools are missing from the session, when they answer with a credential error, or when the user asks to configure, connect, bind, or re-key superdev in a repository. Binds this project to a product by writing its .mcp.json, and diagnoses the case where the tools never appeared at all.
 ---
 
-# Connecting to the Backlog
+# Binding a Project to the Backlog
 
 Every other superdev skill reads and writes a backlog it reaches over HTTPS. The plugin ships no
-code and holds no key: it is a manifest naming four URLs, and each one carries a credential read
-from an environment variable. This skill is what gets those credentials into place.
+code, holds no key, and declares no MCP servers: a repository gets them by being **bound to a
+product**, which is what this skill does.
 
-It is the first-run path, and it is also the path back from a revoked grant, an expired one, or a
-machine that should be working a different product than it is.
+It is the first-run path in every new repository, and it is also the path back from a revoked or
+expired identity, or a project that should be working a different product than it is.
 
-**Announce at start:** "I'm using the Connect skill to configure this machine's backlog access."
+**Announce at start:** "I'm using the Connect skill to bind this project to a product."
 
-## The one fact that explains almost every failure
+## What binds a project
 
-**Claude Code expands `${VAR}` in an MCP manifest only from the shell that launched it.** Not from
-`.claude/settings.json`'s `env` block, not from `.env`, not from anything per-repository — even
-though a `settings.json` `env` value *does* reach the session and *will* show up in `printenv`.
-This was tested, not assumed; the method is in `docs/designs/effort-http-mcp-transport.md`,
-Appendix A.
+superdev is **product-scoped**, and a repository is where a product lives. So the credential is
+per-project, not per-machine: a **product identity** is issued for one product, and it goes in that
+repository's own `.mcp.json`.
 
-Two consequences you will use constantly:
+Nothing is bound until you do this. A fresh install of superdev has skills and agents and **no
+backlog tools at all** — which is correct, because a repository nobody has bound to a product has
+no backlog to reach.
 
-- **The export must happen before `claude` starts.** Exporting in a shell *inside* a running
-  session changes nothing about that session. The fix always ends in a restart.
-- **Nothing per-repository can travel this way.** Which product a credential is for is on the
-  credential itself, not in any file the user can edit. A machine that works two products holds
-  two sets of grants.
+**Why not an environment variable.** Claude Code expands `${VAR}` in an MCP manifest only from the
+shell that launched it — not from `.claude/settings.json`, not from anything inside a repository,
+even though a `settings.json` `env` value does reach the session and shows up in `printenv`. This
+was tested, not assumed; the method is in `docs/designs/effort-http-mcp-transport.md`, Appendix A.
+A shell variable is therefore machine-global, and a machine working two products needs two
+identities. So the credential goes in the file, as a literal, and the file is ignored by git.
 
 ## Step 0: Find out what is actually wrong
 
 There is no `backlog_doctor` tool, and deliberately so — a diagnostic reached over the connection
-it exists to diagnose answers nothing in the one case it is for. Diagnose locally instead.
-
-**Run this first**, from the user's own shell:
+it exists to diagnose answers nothing in the one case it is for. Diagnose locally instead, from the
+project directory:
 
 ```sh
+ls .mcp.json 2>/dev/null && echo "bound" || echo "not bound"
 claude mcp list 2>&1 | grep -i backlog
 ```
 
-Read it literally. It distinguishes the three failures that otherwise look identical:
-
 | What you see | What it means | Where to go |
 |---|---|---|
-| `✔ Connected` on all four | Working. Confirm with `backlog_whoami` and **stop** | — |
-| `Missing environment variables: SUPERDEV_GRANT_…` | The variable is not exported in the shell that launched Claude Code | Step 1 |
-| Listed, not connected, no missing-variable warning | A credential is present and the server refused it | Step 2 |
-| Not listed at all | The plugin is not installed or not enabled | `/plugin`, not this skill |
+| No `.mcp.json`, no `backlog` servers | This repository is not bound to a product yet | Step 1 |
+| Servers listed, `✔ Connected` | Working. Confirm with `backlog_whoami` and **stop** | — |
+| Servers listed, not connected | A credential is present and the server refused it | "Reading a refusal" |
+| `⏸ Pending approval` | Project-scoped servers need approving once, interactively | Run `claude` and approve |
 
-Then call `backlog_whoami`. If the tools are not in the session at all, that is not a tool
-failure — it is Step 0 above, because a connection refused at `initialize` produces a server with
-no tools rather than tools that return errors.
+If the `backlog_*` tools are missing from a session, that is Step 0 — not a tool failure. A
+connection refused at `initialize` produces a server with no tools rather than tools that error.
 
-## Step 1: Get the grants
+## Step 1: Get a product identity for this project
 
-**Three grants, one per role, each naming one role and one product.** This is not overhead to
-work around — a connection holds one authority for its whole life, and both halves of that
-authority have to be unambiguous before the first call. A grant that allows two roles, or that
-names no product, is refused at connect with a 403 and its tools never appear.
+**One credential, naming one product and carrying a ceiling of roles** — planner, builder,
+verifier. The ceiling is enforced by the database; each of the four servers binds one role from the
+URL it is declared at, so a builder still cannot act as a planner and none of them can reach
+another product.
 
-**From the portal**, under **Machines** — sign in by emailed link, name the machine, choose the
-product, and issue the set:
+### If a user identity is available, mint one here
+
+A **user identity** is the tier above: a credential that signs product identities for products in
+its account and can read or write nothing itself. It is kept in the user's shell profile because it
+belongs to the person rather than to any repository.
+
+```sh
+[ -n "$SUPERDEV_USER_IDENTITY" ] && echo "available" || echo "not set"
+```
+
+If it is set, bind this project without sending anyone to a browser:
+
+```sh
+curl -sS -X POST https://pando-catalog-api.fly.dev/v1/identities \
+  -H "authorization: Bearer $SUPERDEV_USER_IDENTITY" \
+  -H 'content-type: application/json' \
+  -d '{"product_key":"<product>","roles":["agent_product_manager","agent_engineer","agent_quality_assurance"],"label":"<machine>"}'
+```
+
+The response's `identity` field is the credential, and it exists **once** — it is not stored
+anywhere and cannot be read back. Write it straight into `.mcp.json` in Step 2. Do not echo it, do
+not put it in a scratch file, and do not repeat it back to the user: this output goes into a
+transcript by construction.
+
+If the product does not exist yet, the answer is a 403 naming the account — create it in the portal
+first, or with `backlog_create_product` from a project that is already bound.
+
+### Otherwise, the user issues one
+
+**From the portal**, under **Product identities** — sign in by emailed link, choose the product,
+name the machine, and issue it:
 
 ```
 https://superdev-portal.vercel.app
 ```
 
-**Or from a checkout of this repository**, once per role:
+**Or from a checkout of the superdev repository:**
 
 ```sh
 cd apps/backend
 bun run mint-grant --org <account> --product <product> \
-  --roles agent_product_manager --label "<machine>"
-bun run mint-grant --org <account> --product <product> \
-  --roles agent_engineer --label "<machine>"
-bun run mint-grant --org <account> --product <product> \
-  --roles agent_quality_assurance --label "<machine>"
+  --roles agent_product_manager,agent_engineer,agent_quality_assurance \
+  --label "<machine>"
 ```
 
-Each prints its value **once** and tells you which variable it belongs in. If the user has no
-account, the hosted backlog is invite-only — the portal issues credentials, it does not create
-accounts. Give them the link and stop:
+The **first** role is the primary one — what the unpinned `backlog` server acts as. Name the
+planner first unless you want otherwise. The value prints **once**.
+
+If the user has no account, the hosted backlog is invite-only. Give them the link and stop:
 
 ```
 https://github.com/pando-codes/superdev-plugin/issues/new?template=access-request.yml
 ```
 
-## Step 2: Export them, in the right shell
+## Step 2: Write it into this project
 
-Put them in the file that runs before `claude` does — `~/.zshrc`, `~/.bashrc`, or whatever the
-user's shell reads at login. **Never** write a credential into a repository, a
-`.claude/settings.json`, or anything a `git add` could reach.
+Create `.mcp.json` at the repository root, with the identity as a literal. The four entries and
+their URLs come from `servers.json` in the plugin — copy them exactly; the server **names** are
+what every agent's frontmatter addresses, and renaming one gives that agent no tools.
 
-```sh
-export SUPERDEV_GRANT_PRODUCT_MANAGER='pcat_live_…'
-export SUPERDEV_GRANT_ENGINEER='pcat_live_…'
-export SUPERDEV_GRANT_QUALITY_ASSURANCE='pcat_live_…'
-
-# Optional. The unpinned `backlog` server, for the main thread and for driving
-# the skills by hand. Any single-role, product-scoped grant works; give it the
-# role you want to act as when you are not inside an agent.
-export SUPERDEV_GRANT='pcat_live_…'
+```json
+{
+  "mcpServers": {
+    "backlog": {
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp",
+      "headers": { "Authorization": "Bearer pcat_live_…" }
+    },
+    "backlog-product-manager": {
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/product-manager",
+      "headers": { "Authorization": "Bearer pcat_live_…" }
+    },
+    "backlog-engineer": {
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/engineer",
+      "headers": { "Authorization": "Bearer pcat_live_…" }
+    },
+    "backlog-quality-assurance": {
+      "type": "http",
+      "url": "https://pando-catalog-api.fly.dev/mcp/quality-assurance",
+      "headers": { "Authorization": "Bearer pcat_live_…" }
+    }
+  }
+}
 ```
 
-Then **restart Claude Code**. Say so explicitly — the session's environment was fixed when it
-launched, and every symptom will persist until it is restarted, which reads as "the fix did not
-work."
+The same value in all four. They differ only by URL, and the URL is what binds the role.
+
+**Then ignore it.** This file contains a live credential:
+
+```sh
+grep -qxF '.mcp.json' .gitignore || echo '.mcp.json' >> .gitignore
+```
+
+Do this in the same step, not afterwards. A `.mcp.json` is ordinarily a committed, shared file —
+that is what project scope is for — and this one is the exception because it carries a secret. An
+identity that reaches a public repository has to be revoked and reissued.
+
+**Restart Claude Code**, then approve the servers when prompted: project-scoped servers are
+approved once, interactively, and that prompt is the only thing standing between a checked-out
+repository and a server definition you did not write.
 
 ## Step 3: Verify
 
@@ -115,10 +168,9 @@ work."
 claude mcp list 2>&1 | grep -i backlog
 ```
 
-All four `✔ Connected`, then `backlog_whoami` in the session. It should report the role the
-namespace implies and the product the grant names. If it reports a *different* role than you
-expect, the grant in that variable is for another role — the endpoint reads the role off the
-credential, never off the URL, so the variable and the credential have drifted apart.
+Four `✔ Connected`, then `backlog_whoami` in the session. It should report the product the identity
+names, and the role the namespace implies — `mcp__backlog-engineer__*` is the engineer whatever
+else is in the session, because the role is bound by the endpoint's URL.
 
 ## Reading a refusal
 
@@ -127,18 +179,22 @@ missing", never "a tool returned an error".
 
 | Message | Cause | Fix |
 |---|---|---|
-| `must have exactly one` role | The grant allows several roles. Legal, and still fine for `/v1/agents/register`, but a session cannot use it | Mint one grant per role |
-| `names no product` | An org-scoped grant, the pre-050 shape | Re-mint with `--product` |
-| `this endpoint is X and the presented grant is Y` | The right grant is in the wrong variable | Swap them |
-| `invalid, revoked, or expired` | Unknown, revoked, or lapsed — deliberately indistinguishable | Mint a replacement |
+| `is still the literal text ${...}` | A `${VAR}` was left in `.mcp.json` and never expanded. Put the credential in as a literal | Step 2 |
+| `names no product` | An org-scoped credential — a user identity, or the pre-050 shape | Issue a **product** identity for this repository |
+| `this endpoint is X, and this identity carries …` | The identity's ceiling does not include the role that endpoint binds | Re-issue naming all three roles |
+| `invalid, revoked, or expired` | Unknown, revoked, or lapsed — deliberately indistinguishable | Issue a replacement |
 
-A grant lasts up to 365 days and the keys it mints last twelve hours, refreshed by the server
-without anyone noticing. So the credential that will eventually stop working is the **grant**, and
-when it does, every agent on the machine stops at once with a 401 that cannot say why. That is
-what the expiry printed at mint time is for.
+A product identity lasts up to 365 days and the keys it mints last twelve hours, refreshed by the
+server without anyone noticing. So the credential that will eventually stop working is the
+identity, and when it does every agent on the machine stops at once with a 401 that cannot say
+why. That is what the expiry printed at issue time is for.
 
 ## What this skill cannot do
 
-It cannot put a credential anywhere for the user, and should not try. Every step above is a change
-to the user's own shell profile, and a skill that edited one would be writing a secret into a file
-it cannot see the rest of. Show the exact lines; let them paste.
+It cannot obtain a credential from nothing. With a **user identity** it can sign one, because that
+is precisely what a user identity is for and the ceiling is enforced by the database rather than by
+this skill's good behaviour. Without one, issuing requires the portal or a database credential this
+plugin deliberately does not hold, and Step 1 is the user's.
+
+What it must never do: invent or guess a credential, reuse one from another project, or print one.
+A credential that reaches a transcript is a credential to revoke.

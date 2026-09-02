@@ -1,0 +1,26 @@
+{
+  "_comment": "The four MCP servers superdev speaks through, and the template /superdev:connect writes into a project's .mcp.json. They are NOT declared in plugin.json: a product identity is per-project, a plugin manifest is per-install, and a credential that belongs to one repository has no business in a file every repository shares. Replace PRODUCT_IDENTITY with the credential. apps/backend/test/mcp-agents.test.ts reads this file to check the agents address servers that exist.",
+  "api_url": "https://pando-catalog-api.fly.dev",
+  "mcpServers": {
+    "backlog": {
+      "type": "http",
+      "path": "/mcp",
+      "role": null
+    },
+    "backlog-product-manager": {
+      "type": "http",
+      "path": "/mcp/product-manager",
+      "role": "product-manager"
+    },
+    "backlog-engineer": {
+      "type": "http",
+      "path": "/mcp/engineer",
+      "role": "engineer"
+    },
+    "backlog-quality-assurance": {
+      "type": "http",
+      "path": "/mcp/quality-assurance",
+      "role": "quality-assurance"
+    }
+  }
+}
