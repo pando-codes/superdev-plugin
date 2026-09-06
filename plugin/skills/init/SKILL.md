@@ -21,29 +21,15 @@ the role it names.  If no `backlog_*` tool is in this session at all, stop here 
 everything below is pointless without them, and the fix is a credential rather than anything you
 can do from inside the session.  See `${CLAUDE_PLUGIN_ROOT}/reference/datastore.md`.
 
-One case looks like that and is not: a session offering **only** `backlog_bind_repository`. Read
-the next section before concluding anything is wrong.
+A fresh checkout that has never been bound has **no** `backlog_*` tools, and that is the ordinary
+state rather than a fault — there is no backlog to reach until this project names a product. Run
+`superdev:connect` and resume here after the restart it asks for.
 
-### Before anything else: is `backlog_bind_repository` the only tool you can see?
-
-Then this repository has no product yet, this machine holds a grant that can create one, and the
-server is offering exactly one tool because there is exactly one useful thing to do. This is the
-ordinary state of a fresh checkout on a configured machine — not a fault.
-
-1. Propose the `key` and `name` as Path A step 2 describes, and **confirm them with the user**.
-   The key is permanent: nothing in this system renames or deletes a product.
-2. Call `backlog_bind_repository`. It creates the product, records the repository, and writes
-   `.superdev/product.json` for you — do not write that file yourself.
-3. **If it answers `created: false`,** a colleague's machine already added this repository to the backlog
-   and you have joined their product rather than making a second one. Say so; the key you
-   proposed was not used.
-4. Tell the user to commit the binding and **restart the Claude Code session** — say plainly that
-   `/reload-plugins` is not enough, because it does not restart MCP servers — then stop. The
-   backlog tools cannot appear until they do — every server resolved its credentials at
-   startup — so there is nothing further this run can do. Resume at Step 1 after the restart.
-
-Do not interview for capabilities first. An interview that ends at a server which cannot write
-them has wasted the user's time, and the restart discards nothing except your place in this file.
+No MCP session can create a product. A session runs on a product-scoped key, 055 requires a
+credential naming no product to insert one, and so creation belongs to a person in the portal or
+to a user identity — both of which `superdev:connect` walks through. Do not interview for
+capabilities first: an interview that ends at a session which cannot write them has wasted the
+user's time, and the restart discards nothing except your place in this file.
 
 ### Two ways to initialize, and `backlog_whoami` says which one you are in
 
@@ -235,9 +221,8 @@ owns:
 { "product_key": "reelmates" }
 ```
 
-**On the bind-repository path you have already done this** — `backlog_bind_repository` wrote the
-file itself, including the repository it read from the checkout, and writing over it by hand
-would drop that. Skip to committing it.
+**On the provisioned-but-empty path you have already written this** at Step 0 — skip to
+committing it.
 
 This is what Step 1 reads on any future run, and what every other skill uses to scope its
 queries to the right product.  **Write it in the same breath as the product row** — a product

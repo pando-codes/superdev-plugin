@@ -11,6 +11,52 @@ renamed, or had an argument's meaning changed — which breaks the agent definit
 **minor** for a new tool, skill, or argument, or a materially rewritten tool description;
 **patch** for anything that changes no tool's name, arguments, or contract.
 
+## 0.16.1 — 2026-09-05
+
+**Claude Code 2.1.x does not apply an agent definition to a dispatched agent.** Dispatch
+`superdev:superdev-engineer` from a session and you get a generic agent carrying *that session's*
+system prompt and tool surface — no role instructions, no one-namespace tool list, every backlog
+server the dispatcher had. The definition is parsed and listed correctly and then not
+instantiated. It is deterministic, it survives a restart, and it affects built-in agent types
+too, so it is not something this plugin can fix.
+
+`claude --agent superdev:superdev-<name>` at top level **does** apply the definition. That is the
+working path until the harness is fixed.
+
+**`execute` and `work` now open every dispatch with a handshake.** The task prompt is the only
+text a substituted child reliably reads, so that is where the check lives: the agent is asked
+whether its own system prompt carries its heading, and answers `DEFINITION APPLIED` or
+`DEFINITION NOT APPLIED` before it touches a `backlog_*` tool.
+
+**`work` now counts its backlog namespaces before claiming.** Holding more than one, or holding
+the unpinned `backlog` server at all, means you are the session rather than a pinned agent — so
+work through `mcp__backlog__*` as `<label>-main` rather than picking a role's server off a menu.
+Choosing `backlog-engineer` from four options is choosing a role, which is the one thing no
+caller may do.
+
+**What you have to do about it.** Nothing to reissue — no credential exceeded its ceiling, and
+the endpoints still pin their roles correctly. If you dispatch superdev agents from a session,
+read the first line of their reply; `DEFINITION NOT APPLIED` means Claude Code gave you a copy of
+yourself. Tracked at superdev#73 and upstream at anthropics/claude-code#92426.
+
+**Also fixed: three skills instructed you to call tools that do not exist.** `connect` told you to
+write the credential straight into `.mcp.json`, which has not been the mechanism since 0.14.0 and
+puts a live identity in the working tree; it now says local scope, as its own Step 2 always did.
+`connect` and `reference/datastore.md` still named `backlog_create_product`, removed in 0.15.0.
+
+And `init` routed every fresh checkout through **`backlog_bind_repository`**, a tool from the
+architecture where the MCP servers shipped inside the plugin bundle. It was never ported when the
+tools moved to the backend, so that path could not have worked for several releases: the skill
+told you a session offering only that tool was the ordinary state of a fresh checkout, when a
+fresh checkout in fact has no `backlog_*` tools at all and wants `superdev:connect`. Fixed, and
+the surrounding prose now says plainly that no MCP session can create a product.
+
+A test now asserts that **every `backlog_*` name in a skill, in `reference/datastore.md`, or in
+the README is a tool the server actually registers.** All three of these outlived their removal
+because a skill is prose and a tool name in prose is a string nothing resolves. A name that is
+mentioned precisely because it does *not* exist — `connect` explaining there is no
+`backlog_doctor` — is listed explicitly in the test rather than pattern-matched.
+
 ## 0.16.0 — 2026-09-02
 
 **`backlog_list_products` is removed.** Since 031 it returned only the product your credential is

@@ -24,7 +24,20 @@ nobody can coordinate with.
    this repository was never initialized — stop and say so; do not guess from the directory
    name.
 
-2. **Call `backlog_whoami`.** It answers three things you need before doing anything:
+2. **Count the backlog namespaces you hold, before you call anything.**
+
+   - Exactly one `mcp__backlog-<role>__*` namespace and no `mcp__backlog__*`: you are that
+     role's pinned agent. Continue.
+   - More than one `mcp__backlog-*__` namespace, or `mcp__backlog__*` at all: you are the main
+     session, or an agent that inherited a session's surface (superdev issue #73). Work
+     through `mcp__backlog__*` as `<label>-main` and **do not choose a pinned server** —
+     picking `backlog-engineer` from a menu of four is choosing a role, which is the one thing
+     no caller may do. The unpinned server's role is decided by the credential, not by you.
+   - You were dispatched *as* a role and hold several namespaces: say so and stop. You are
+     not that agent, and finishing its work under its `agent_id` puts a name on the record
+     that did not act.
+
+3. **Call `backlog_whoami`.** It answers three things you need before doing anything:
    - `pando_role` — which queue is yours. You cannot work another one.
    - `writes.product_key` — the product this key may write, or `any`.
    - `agent_id` — the identity your claims are recorded under.
@@ -32,9 +45,35 @@ nobody can coordinate with.
    If the role is not the one you expected, **stop and say so**. Do not proceed hoping the
    writes will land; they will not, and you will have burned the run discovering it.
 
-3. **If several agents share this session,** pass a distinct `agent_id` on every work tool
+4. **If several agents share this session,** pass a distinct `agent_id` on every work tool
    call. Without it they are one agent to the backlog and will release and finish each other's
    items.
+
+## Dispatching a superdev agent: the handshake
+
+Claude Code 2.1.x can dispatch a plugin agent as a **generic agent** — no agent prompt, no tool
+list, the dispatcher's whole surface — and it does so silently. The child looks like a working
+agent; it is this session wearing a role's name. (superdev issue #73.)
+
+So every dispatch of `superdev:superdev-planner`, `superdev:superdev-engineer`, or
+`superdev:superdev-verifier` begins its task prompt with this paragraph, **verbatim**, with
+`<name>` and `<role>` filled in:
+
+> Before anything else, answer in one line. Does your system prompt contain the heading
+> `# superdev-<name>` and the sentence "Your role is `<role>`"? If yes, reply exactly
+> `DEFINITION APPLIED` and continue with the task below. If no, reply exactly
+> `DEFINITION NOT APPLIED` and stop: call no `backlog_*` tool, load no skill, do nothing else.
+
+Then read the reply before anything else you do with that agent:
+
+- `DEFINITION APPLIED` — proceed. The agent holds its own role's tools and its own prompt.
+- Anything else — the dispatch failed. **Do not re-dispatch to see whether it is intermittent;
+  it is not.** Do the work in this session instead, as `<label>-main` through the unpinned
+  `backlog` server, or tell the user to run `claude --agent superdev:superdev-<name>` top-level,
+  which applies the definition. Say which you did.
+
+A dispatch that skipped the handshake and "worked" is the case to distrust most: the child had
+every backlog namespace this session has, wrote as `<label>-<role>`, and nothing said so.
 
 ## The loop
 

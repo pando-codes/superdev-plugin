@@ -186,7 +186,6 @@ weighting.  Two readings are easy to get backwards:
 
 | Tool | Requires |
 |---|---|
-| `backlog_create_product` | product-manager or head-of-engineering |
 | `backlog_create_capability`, `backlog_update_capability` | product-manager |
 | `backlog_create_feature`, `backlog_update_feature` | product-manager |
 | `backlog_create_story`, `backlog_update_story` | product-manager |

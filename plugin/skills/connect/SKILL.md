@@ -1,6 +1,6 @@
 ---
 name: connect
-description: You MUST use this when the backlog_* tools are missing from the session, when they answer with a credential error, or when the user asks to configure, connect, bind, or re-key superdev in a repository. Binds this project to a product by writing its .mcp.json, and diagnoses the case where the tools never appeared at all.
+description: You MUST use this when the backlog_* tools are missing from the session, when they answer with a credential error, or when the user asks to configure, connect, bind, or re-key superdev in a repository. Binds this project to a product by registering its identity at local scope, and diagnoses the case where the tools never appeared at all.
 ---
 
 # Binding a Project to the Backlog
@@ -49,9 +49,13 @@ claude mcp list 2>&1 | grep -i backlog
 | Servers listed, `✔ Connected` | Working. Confirm with `backlog_whoami` and **stop** | — |
 | Servers listed, not connected | A credential is present and the server refused it | "Reading a refusal" |
 | `⏸ Pending approval` | Project-scoped servers need approving once, interactively | Run `claude` and approve |
+| Four `✔ Connected`, but a **dispatched agent** reports no `backlog_*` tools — or reports more than one `backlog` namespace | Not a binding problem. The child holds its dispatcher's surface, whatever its definition says (issue #73) | Check the *dispatching* session's tools. Drive the skill from a session that holds the servers, or run the agent top-level with `claude --agent` |
 
 If the `backlog_*` tools are missing from a session, that is Step 0 — not a tool failure. A
 connection refused at `initialize` produces a server with no tools rather than tools that error.
+
+Inside a dispatched agent, ask first whether the *parent* has them: on Claude Code 2.1.x a child
+has exactly its dispatcher's surface, and a missing tool there is a fact about the dispatcher.
 
 ## Step 1: Get a product identity for this project
 
@@ -107,12 +111,13 @@ curl -sS -X POST https://pando-catalog-api.fly.dev/v1/identities \
 ```
 
 The response's `identity` field is the credential, and it exists **once** — it is not stored
-anywhere and cannot be read back. Write it straight into `.mcp.json` in Step 2. Do not echo it, do
+anywhere and cannot be read back. Register it at local scope in Step 2. Do not echo it, do
 not put it in a scratch file, and do not repeat it back to the user: this output goes into a
 transcript by construction.
 
 If the product does not exist yet, the answer is a 403 naming the account — create it in the portal
-first, or with `backlog_create_product` from a project that is already bound.
+first, or with a user identity via `POST /v1/orchestrator/products` above. No MCP session can
+create one: every session runs on a product-scoped key, and 055 requires an unscoped credential.
 
 ### Otherwise, the user issues one
 
@@ -215,7 +220,7 @@ missing", never "a tool returned an error".
 
 | Message | Cause | Fix |
 |---|---|---|
-| `is still the literal text ${...}` | A `${VAR}` was left in `.mcp.json` and never expanded. Put the credential in as a literal | Step 2 |
+| `is still the literal text ${...}` | A `${VAR}` was left in the local-scope entry and never expanded. Put the credential in as a literal | Step 2 |
 | `names no product` | An org-scoped credential — a user identity, or the pre-050 shape | Issue a **product** identity for this repository |
 | `this endpoint is X, and this identity carries …` | The identity's ceiling does not include the role that endpoint binds | Re-issue naming all three roles |
 | `invalid, revoked, or expired` | Unknown, revoked, or lapsed — deliberately indistinguishable | Issue a replacement |

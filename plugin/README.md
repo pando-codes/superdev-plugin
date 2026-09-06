@@ -121,8 +121,11 @@ sees `backlog_update_acceptance_criterion`. That is a surface, not a boundary: R
 refuses, and if the backlog is unreachable at startup the full menu is offered and the database
 refuses exactly as it always would. `SUPERDEV_ROLE` may narrow the surface, never widen it.
 
-The three shipped agents in `agents/` carry the same narrowing in their tool lists, so a
-subagent is offered its role's tools and no others.
+The three shipped agents in `agents/` carry the same narrowing in their tool lists. A host that
+applies the definition — `claude --agent superdev:superdev-<name>` — offers that agent its role's
+tools and no others. Claude Code 2.1.x's Agent-tool dispatch does not apply the definition at all
+(#73): the child holds the dispatching session's tools and prompt, and the `execute` and `work`
+skills open every dispatch with a handshake that says so and stops.
 
 ## Installation
 
@@ -258,7 +261,9 @@ agents/
 ```
 
 `agents/` holds one agent per role that does superdev's work, each narrowed to its role's tools.
-A test asserts those lists against the role map, so the two cannot drift.
+A test asserts those lists against the role map, so the two cannot drift — and asserts the dispatch
+handshake in `skills/execute` and `skills/work`, because on Claude Code 2.1.x the list is honoured
+top-level and ignored on dispatch (#73).
 
 `skills/execute/` bundles `atdd.md`, `testing-antipatterns.md`, and `git-worktrees.md`, loaded
 on demand rather than up front.
@@ -313,18 +318,15 @@ When the backlog is unreachable, superdev stops.
 
 ```sh
 bun install
-bun test          # request shapes, tool surface, and the bundle itself
-bun run build     # rebuild mcp/dist/stdio.js — REQUIRED after editing mcp/src
+bun test          # the naming rules — nothing shipped here says "catalog"
 bunx tsc
 ```
 
-**Run `bun run build` after any change to `mcp/src`.** Every other test imports the source, so
-they would stay green while the file that actually ships was a revision behind; `bundle.test.ts`
-rebuilds and compares bytes to make that a red test instead.
-
-The integration suite that runs the tools against a real API, a real database, and real RLS
-lives in `apps/backend/test/`, alongside the migrations it asserts against. What runs
-here is what belongs to this repository: which request each tool produces.
+There is no build step, and no `mcp/src` to build: the plugin stopped being a server, so what
+ships is markdown and `servers.json`. The tools it addresses are served from
+`apps/backend/src/mcp`, and the integration suite that runs them against a real API, a real
+database, and real RLS lives in `apps/backend/test/`, alongside the migrations it asserts
+against. What runs here is what belongs to this half: that the names line up.
 
 ### Known model divergence
 
